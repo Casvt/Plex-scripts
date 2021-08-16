@@ -1,11 +1,11 @@
 #!/bin/bash
 
 #ip of plex server to auto update
-ipplexserver=192.168.2.15
+ipplexserver=XXX.XXX.XXX.XXX
 #port of that plex server
-plexport=32400
+plexport=XXXXX
 #api token of that plex server
-plexapitoken=VhAa_ZKsSFm6y8yjgnFs
+plexapitoken=XXXXXXXXXXXetc.
 #directory where the logfile should go
 logfolder=/home/cas/scripts/logs
 
