@@ -1,11 +1,11 @@
 #! /bin/bash
 
 #ip adress of radarr instance
-radarr_ip=192.168.2.15
+radarr_ip=XXX.XXX.XXX.XXX
 #port radarr instance is running on
-radarr_port=8006
+radarr_port=XXX
 #api token of radarr instance
-radarr_api_token=29e20ef0a3974a999596c272e1deef1a
+radarr_api_token=XXXXXXXXXXXXXXXXXetc.
 #directory where the logfile should go
 logfolder=/home/cas/scripts/logs
 
