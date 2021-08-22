@@ -1,25 +1,45 @@
 #! /bin/bash
 
+#The use case of this script is the following:
+#	If you're streaming media from the main plex server to a client and the stream starts buffering for atleast 10 seconds,
+#	then it will switch over to streaming that media from the backup server.
+#	That means that if the media that you're watching has been buffering (loading) for more than 10 seconds,
+#	it will stop the stream and start a new one from the backup plex server
+#	It will only switch over when the media has been found on the backup server.
+#
+#SETUP:
+#In Tautulli, go to Settings -> Notification Agents -> Add a new notification agent -> Script
+#	Configuration:
+#		Script Folder = folder where this script is stored
+#		Script File = select this script
+#		Script Timeout = 0
+#		Description is optional
+#	Triggers:
+#		Playback Start = check
+#	Arguments:
+#		Playback Start -> Script Arguments = {session_id}
+#SAVE
+
 #ip-address of the main plex server
-main_plex_ip=192.168.2.18
+main_plex_ip=xxx.xxx.xxx.xxx
 #port of the main plex server
-main_plex_port=32400
+main_plex_port=xxxxx
 #api token of the main plex server
-main_plex_token=2q6mc5PegzUk1a12E_TR
+main_plex_token=xxxxxxxxxetc.
 
 #ip-address of the tautulli server that monitors the main plex server
-main_tautulli_ip=192.168.2.18
+main_tautulli_ip=xxx.xxx.xxx.xxx
 #port of the tautulli server that monitors the main plex server
-main_tautulli_port=8181
+main_tautulli_port=xxxx
 #api token of the tautulli server that monitors the main plex server
-main_tautulli_token=8f823962d93a474281a0f74096a05358
+main_tautulli_token=xxxxxxxxxetc.
 
 #ip-address of the backup plex server
-backup_plex_ip=192.168.2.19
+backup_plex_ip=xxx.xxx.xxx.xxx
 #port of the backup plex server
-backup_plex_port=32400
+backup_plex_port=xxxxx
 #api token of the backup plex server
-backup_plex_token=yLFtdqAHgmst4CYpHm1h
+backup_plex_token=xxxxxxxxxetc.
 
 session_id="$1"
 
