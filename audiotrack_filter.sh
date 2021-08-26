@@ -1,5 +1,14 @@
 #! /bin/bash
 
+#The use case of this script is the following:
+#	If you have movie files with more languages (audio tracks) than just English or Dutch, this scripts will remove those audio tracks.
+#	So: If a movie file has English, Italian, Dutch and Korean as audio tracks, then after the script the movie file will only have English and Dutch.
+#	So you're basically "cleaning up" movie files by removing unnecessary languages.
+#	If no english track was found in the movie file (e.g. "Parasite", which is only in Korean and Italian) or only english, the script will ignore it.
+#
+#Requires Radarr, curl, jq and mkvtoolnix
+#WARNING: THIS SCRIPT CAN TAKE HOURS OR DAYS IF YOU HAVE THOUSANDS OF MOVIES THAT FALL UNDER THE SCRIPT
+
 #ip adress of radarr instance
 radarr_ip=XXX.XXX.XXX.XXX
 #port radarr instance is running on
