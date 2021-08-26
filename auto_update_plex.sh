@@ -1,5 +1,14 @@
 #!/bin/bash
 
+#The use case of this script is the following:
+#	When the script is run, it will check if there is a new version of plex available for your server
+#	and if so, download and install it.
+#	When someone is streaming while the server wants to update, it will wait until the person is done streaming.
+#
+#IMPORTANT: ON LINE 71 (NEWLINK VAR), CHANGE THE JQ PATH TO FIT YOUR OS. IT IS CURRENTLY SET TO UBUNTU 64BIT.
+#
+#The idea is to set the script up to run every 12 hours using crontab for example.
+
 #ip of plex server to auto update
 ipplexserver=XXX.XXX.XXX.XXX
 #port of that plex server
