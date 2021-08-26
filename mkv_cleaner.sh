@@ -1,8 +1,15 @@
 #!/bin/bash
 
-#https://www.reddit.com/r/PleX/comments/pbwf41/ill_make_any_script_suggestions_you_give/
+#made after this suggestion
+#https://www.reddit.com/r/PleX/comments/pbwf41/ill_make_any_script_suggestions_you_give/haf05od/?utm_source=share&utm_medium=web2x&context=3
 
-movie_folder=/home/cas/Share
+#The use case of this script is the following:
+#	It will remove all unnecessary metadata in a .mkv file
+#SETUP:
+#	Enter the folder where all the files are located below and run the script (it is recursive so it's okay to have every file in a sepperate folder).
+#	The idea is that you run this every 12 or 24 hours using crontab for example.
+
+movie_folder=/home/cas/plex-media/Movies
 
 grep -R ".*.mkv" "$movie_folder" | grep -Po "^Binary file \K.*(?= matches$)" | \
 while read -r level
@@ -14,8 +21,6 @@ do
 		tracks=("${tracks[@]}" "--edit track:${track_type[$level_2]}1 --delete name")
 	done
 	echo "$level"
-	echo "${tracks[@]}"
 	mkvpropedit "$level" --tags all: -d prev-filename -d next-filename -d prev-uid -d next-uid ${tracks[@]}
 	echo ""
-	sleep 1s
 done
