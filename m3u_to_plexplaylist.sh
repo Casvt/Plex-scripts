@@ -2,9 +2,9 @@
 
 #used for converting an m3u file to a plex playlist
 
-plex_ip=188.40.107.62
-plex_port=32400
-plex_api_token=-N1GEacydxJ9Xpd98_js
+plex_ip=xxx.xxx.xxx.xxx
+plex_port=xxxxx
+plex_api_token=xxxxxxxxetc.
 
 #--------------------------------------------
 
