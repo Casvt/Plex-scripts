@@ -1,5 +1,8 @@
 #!/bin/bash
 
+#made after this suggestion
+#https://www.reddit.com/r/PleX/comments/pbwf41/ill_make_any_script_suggestions_you_give/haf6660?utm_source=share&utm_medium=web2x&context=3
+
 #used for converting an m3u file to a plex playlist
 
 plex_ip=xxx.xxx.xxx.xxx
