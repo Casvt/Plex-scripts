@@ -11,6 +11,22 @@
 
 movie_folder=/home/cas/plex-media/Movies
 
+#--------------------------------------------
+
+if ! [[ -d "$movie_folder" ]]
+then
+	echo "Error: movie folder is not a valid folder"
+	exit 1
+fi
+
+if apt-cache policy mkvtoolnix | grep -Pq "^\s*Installed: \(none\)$"
+then
+	echo "Error: mkvtoolnix is not installed"
+	exit 1
+fi
+
+#-----
+
 grep -R ".*.mkv" "$movie_folder" | grep -Po "^Binary file \K.*(?= matches$)" | \
 while read -r level
 do
