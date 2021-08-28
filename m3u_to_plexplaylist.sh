@@ -29,7 +29,7 @@ then
 	exit 1
 fi
 
-for level in curl mkvtoolnix
+for level in curl
 do
 	if apt-cache policy $level | grep -Pq "^\s*Installed: \(none\)$"
 	then
