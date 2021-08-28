@@ -11,11 +11,14 @@
 plex_ip=xxx.xxx.xxx.xxx
 #port of the plex server
 plex_port=xxxxx
-#login credentials of an user that has access to the server; the playlist will be added to this user
-plex_username=xxxx@xxxx.xxx
-plex_password=xxxxxxx
-
-plex_api_token=$(curl -sL 'https://plex.tv/api/v2/users/signin?X-Plex-Product=Plex%20script&X-Plex-Client-Identifier=plexscript' -H 'Accept: application/json' --data-raw 'login='"$plex_username"'&password='"$plex_password"'&rememberMe=true' | jq -rM .authToken)
+#api token of the user that has access to the server; the playlist will be added to this user
+#HOW-TO:
+#	In google, go to the plex web-ui
+#	Press ctrl+shift+i and go to the network tab
+#	In the web-ui, go to a library of the server
+#	In the network tab, click on a request that was made and search for "X-Plex-Token" and copy it's value below
+#	This token will expire after some time, so if you can't get any result when searching for a show with this script, do this again and paste the new token.
+plex_api_token=xxxxxxxxxetc.
 #--------------------------------------------
 
 if ! [[ "$plex_port" =~ ^[0-9]{1,5}$ ]]
