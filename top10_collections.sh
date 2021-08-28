@@ -3,6 +3,8 @@
 #The use case of this script is the following:
 #	Run this script to add a collection with the 10 most popular movies according to tautulli
 #	It is intented to run every so often (use crontab to run it every 12 hours for example)
+#
+#The name of the collection is "Top 10 movies"
 
 #ip address of the plex server
 plex_ip=xxx.xxx.xxx.xxx
