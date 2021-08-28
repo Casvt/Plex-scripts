@@ -11,9 +11,11 @@
 plex_ip=xxx.xxx.xxx.xxx
 #port of the plex server
 plex_port=xxxxx
-#api token of the user that has access to the server; the playlist will be added to this user
-plex_api_token=xxxxxxxxxxetc.
+#login credentials of an user that has access to the server; the playlist will be added to this user
+plex_username=xxxx@xxxx.xxx
+plex_password=xxxxxxx
 
+plex_api_token=$(curl -sL 'https://plex.tv/api/v2/users/signin?X-Plex-Product=Plex%20script&X-Plex-Client-Identifier=plexscript' -H 'Accept: application/json' --data-raw 'login='"$plex_username"'&password='"$plex_password"'&rememberMe=true' | jq -rM .authToken)
 #--------------------------------------------
 
 if ! [[ "$plex_port" =~ ^[0-9]{1,5}$ ]]
