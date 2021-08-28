@@ -24,7 +24,7 @@ then
 	exit 1
 fi
 
-if ! [[ "$plex_port" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]
+if ! [[ "$plex_ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]
 then
 	echo "Error: $level is not a valid ip-address"
 	exit 1
