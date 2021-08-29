@@ -56,7 +56,7 @@ dir=/
 unset folder_selection
 until [[ "${folder_selection,,}" = cancel ]]
 do
-clear_screen
+clear
 cd "$dir" || exit 1
 ls_output=$(ls -d */ 2>/dev/null | sed "s|/$||g")
 echo "--------------------------------"
