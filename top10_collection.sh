@@ -54,7 +54,7 @@ done
 
 #-----
 
-id=$(curl -sL "http://$plex_ip:$plex_port/library/sections/$section_id/collections?X-Plex-Token=$plex_api_token" | jq -rM '.MediaContainer.Metadata[] | select(.title=="Top 10 movies").ratingKey' 2>/dev/null)
+id=$(curl -sL -H 'Accept: application/json' "http://$plex_ip:$plex_port/library/sections/$section_id/collections?X-Plex-Token=$plex_api_token" | jq -rM '.MediaContainer.Metadata[] | select(.title=="Top 10 movies").ratingKey' 2>/dev/null)
 if [[ $? = 0 ]]
 then
 	curl -sL -X DELETE "http://$plex_ip:$plex_port/library/collections/$id?X-Plex-Token=$plex_api_token"
