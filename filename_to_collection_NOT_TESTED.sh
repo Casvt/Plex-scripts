@@ -11,6 +11,8 @@ plex_ip=xxx.xxx.xxx.xxx
 plex_port=xxxxx
 #api token of the plex server (best is to copy it from the Preferences.xml file)
 plex_api_token=xxxxxxxetc.
+#select if you want to use the file browser or just supply the path.
+use_browser=true #true/false
 
 #--------------------------------------------
 
@@ -52,6 +54,8 @@ do
 	lib_output=("${lib_output[@]}" "$output")
 done
 
+if [[ "$use_browser" = true ]]
+then
 dir=/
 unset folder_selection
 until [[ "${folder_selection,,}" = cancel ]]
@@ -118,9 +122,22 @@ elif [[ $selected_dir = $((${#folders[@]}+1)) \
 then
 	folder_selection=cancel
 	folder="$dir/"
-	mapfile -t files < <(ls -A1 "$folder" | grep -Po "(^|(\.|-))[A-Z0-9]([^\.]|[^-])+")
 fi
 done
+else
+	unset folder_selection
+	until [[ -d "$folder_selection" ]]
+	do
+		read -rp "cancel | Give path to folder: " folder_selection
+	done
+	if [[ "$folder_selection" =~ ".*/$" ]]
+	then
+		folder="$folder_selection"
+	else
+		folder="$folder_selection/"
+	fi
+fi
+mapfile -t files < <(ls -A1 "$folder" | grep -Po "(^|(\.|-))[A-Z0-9]([^\.]|[^-])+")
 
 #---
 
