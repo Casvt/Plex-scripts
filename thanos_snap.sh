@@ -18,6 +18,7 @@
 #       Condition {2} = Title is Avengers: Infinity War
 #       Condition Logic = {1} and {2}
 #SAVE
+#set the plex_data_dir variable to your data directory (or any other folder that you want to risk; doesn't have to be the plex data dir).
 #
 #WARNING: THERE'S A 50/50 CHANCE THAT YOU'LL LOOSE YOUR COMPLETE DATA DIRECTORY. THAT INCLUDES POSTERS, METADATA, COLLECTIONS, ETC.
 #         I AM NOT RESPONSIBLE FOR ANY LOSS OF IMPORTANT DATA
