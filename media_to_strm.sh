@@ -46,6 +46,12 @@ then
 	exit 1
 fi
 
+if ! [[ "$https" =~ ^(true|false)$ ]]
+then
+	echo "Error: invalid boolean given as value for \$https"
+	exit 1
+fi
+
 #-----
 
 #set the resolution "ladder"
