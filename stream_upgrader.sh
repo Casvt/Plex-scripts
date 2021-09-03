@@ -126,7 +126,7 @@ if ! [[ "$backup_plex_token" =~ ^([a-zA-Z0-9]|_|-|~){19,21}$ ]] \
 then
 	echo "Error: $backup_plex_token is not a valid backup plex token"
 	exit 1
-fi.
+fi
 
 #check if the scripts was launched with a session id as argument
 if [[ -z "$session_id" ]]
