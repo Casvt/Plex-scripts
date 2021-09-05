@@ -501,7 +501,7 @@ then
 		then
 			continue
 		fi
-		if ! [[ " ${in_library_remote_target_ids[@]} " =~ "$(echo "$movie_output" | jq -rM .MediaContainer.Metadata[].librarySectionID)" ]]
+		if ! [[ " ${in_library_remote_target_ids[@]} " =~ "$(echo "$movie_output" | jq -rM .MediaContainer.Metadata[].librarySectionID)" ]] \
         	&& [[ -n "${in_library_remote_target_ids[@]}" ]]
         	then
         	        continue
