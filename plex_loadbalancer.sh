@@ -145,7 +145,7 @@ client.playMedia(movie, offset=$view_offset, key=\"$key\")" | python3 -
 
 reverse_switch_over()
 {
-	#use PlexAPI to stop the current stream on the main server
+	#use PlexAPI to stop the current stream on the backup server
         echo "Stopping current stream from backup server"
         echo "from plexapi.server import PlexServer
 baseurl = 'http://$backup_plex_ip:$backup_plex_port'
@@ -154,7 +154,7 @@ plex = PlexServer(baseurl, token)
 
 client = plex.client(\"$player\")
 client.stop(mtype='video')" | python3 -
-        #launch the same media on the same client from the backup server
+        #launch the same media on the same client from the main server
         echo "Starting stream from main server"
         echo "from plexapi.server import PlexServer
 baseurl = 'http://$main_plex_ip:$main_plex_port'
