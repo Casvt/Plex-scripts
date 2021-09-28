@@ -43,7 +43,7 @@ fi
 list_output=$(pip3 list)
 for level in "PlexAPI"
 do
-	if ! echo "$list_output" | tac | grep -q "^$level"
+	if ! echo "$list_output" | tac | grep -q "$level"
 	then
 		echo "Error: $level is not installed; use pip3"
 		exit 1
