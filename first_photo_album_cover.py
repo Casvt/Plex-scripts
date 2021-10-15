@@ -84,7 +84,7 @@ for key in lib_keys:
 		#store the output in a variable and refer to it to reduce web requests
 		album_output = json.loads(ssn.get('http://' + PLEX_IP + ':' + PLEX_PORT + album).text)['MediaContainer']['Metadata'][0]
 		#get the title of the album
-		album_title = album_output['parentTitle']
+		album_title = album_output['title']
 		#check if the album falls under any of the rules. If the outcome results in the album needing to be denied, execute the continue command to skip it
 		if reg_loop_ex() == 1: continue
 		if album_title in exclusion_name: continue
