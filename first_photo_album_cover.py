@@ -81,12 +81,16 @@ for key in lib_keys:
 	for folders in json.loads(ssn.get('http://' + PLEX_IP + ':' + PLEX_PORT + '/library/sections/' + key + '/folder').text)['MediaContainer']['Metadata']: album_keys.append(folders['key'])
 	#do this for every album entry
 	for album in album_keys:
+		#store the output in a variable and refer to it to reduce web requests
 		album_output = json.loads(ssn.get('http://' + PLEX_IP + ':' + PLEX_PORT + album).text)['MediaContainer']['Metadata'][0]
+		#get the title of the album
 		album_title = album_output['parentTitle']
+		#check if the album falls under any of the rules. If the outcome results in the album needing to be denied, execute the continue command to skip it
 		if reg_loop_ex() == 1: continue
 		if album_title in exclusion_name: continue
 		if reg_loop_in() == 1: continue
 		if inclusion_name and not album_title in inclusion_name: continue
 		if album_output['parentRatingKey'] in exclusion_key: continue
 		if inclusion_key and not album_output['parentRatingKey'] in inclusion_key: continue
+		#upload the picture to the posters part of the album (automatically applied)
 		plex.fetchItem(int(album_output['parentRatingKey'])).uploadPoster(filepath=str(album_output['Media'][0]['Part'][0]['file']))
