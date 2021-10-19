@@ -25,7 +25,7 @@ playlist_name="TV Channel"
 #	url 1: key=%2Flibrary%2Fmetadata%2F583
 #	url 2: key=%2Flibrary%2Fmetadata%2F1666
 #	series=("583" "1666")
-series=("1666" "1973" "917")
+series=()
 
 #--------------------------------------------
 
