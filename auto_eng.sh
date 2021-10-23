@@ -82,7 +82,7 @@ then
 		for level_2 in "${part_id[@]}"
 		do
 			#do this for every part of that movie
-			en_audio_id=$(echo "$movie_output" | jq -rM '.MediaContainer.Metadata[].Media[].Part[] | select(.id==29).Stream[] | select(.streamType==2 and .languageTag=="en").id' | head -n 1)
+			en_audio_id=$(echo "$movie_output" | jq -rM --argjson ID "$level_2" '.MediaContainer.Metadata[].Media[].Part[] | select(.id==$ID).Stream[] | select(.streamType==2 and .languageTag=="en").id' | head -n 1)
 			if [[ -z $(echo "$movie_output" | jq -rM --argjson ID "$level_2" '.MediaContainer.Metadata[].Media[].Part[] | select(.id==$ID).Stream[] | select(.streamType==2 and .selected==true and .languageTag=="en")') ]] \
 			&& [[ -n "$en_audio_id" ]]
 			then
