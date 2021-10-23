@@ -23,7 +23,7 @@ if not re.search('^[\w\d_-~]{19,21}$', plex_api_token):
 	exit(1)
 
 section_output = json.loads(requests.get('http://' + plex_ip + ':' + plex_port + '/library/sections', params={'X-Plex-Token': plex_api_token}, headers={'Accept': 'application/json'}).text)
-arguments, values = getopt.getopt(sys.argv[1:], 'l:f:', ['LibraryName =', 'File ='])
+arguments, values = getopt.getopt(sys.argv[1:], 'l:f:', ['LibraryName=', 'File='].)
 lib_id = ''
 file_path = ''
 for argument, value in arguments:
