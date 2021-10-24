@@ -1,3 +1,7 @@
+#The use case of this script is the following:
+#	After selecting a library and giving a quality profile (e.g. main 10),
+#	list all movies/episodes that match that profile.
+
 plex_ip = ''
 plex_port = ''
 plex_api_token = ''
