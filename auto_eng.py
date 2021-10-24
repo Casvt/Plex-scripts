@@ -1,3 +1,7 @@
+#The use case of this script is the following:
+#	After you've selected a movie library, it will try to set the audio track language to english
+#	if it was not already. It will do it for every movie inside that library.
+
 plex_ip = ''
 plex_port = ''
 plex_api_token = ''
