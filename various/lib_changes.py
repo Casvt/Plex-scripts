@@ -6,6 +6,10 @@
 #	This is basically the 'recently added' trigger in Tautulli
 #	The info about the media is given as a dict inside the variable media_output
 #	To see what the structure is of the dict, print it (e.g. print(media_output) ) and see for yourself what kind of information is available
+#REQUIREMENTS (pip3 install ...):
+#	PlexAPI
+#	websocket
+#	requests
 
 plex_ip = ''
 plex_port = ''
