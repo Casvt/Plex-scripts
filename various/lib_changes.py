@@ -37,9 +37,9 @@ def process(data):
 		if int(media_output['MediaContainer']['Metadata'][0]['addedAt']) >= time.time() - 100 and int(media_output['MediaContainer']['Metadata'][0]['addedAt']) <= time.time() + 100:
 			print('new media')
 			#media item was added to lib
-			#This is the place where you want to put your command
-			#The command that you put here will be executed when a new item is added to your library
-			#You can use media_output (type is dict) to use info about the movie in your command e.g.:
+			#This is the place where you want to put your command(s)
+			#The command(s) that you put here will be executed when a new item is added to your library
+			#You can use media_output (type is dict) to use info about the media in your command(s) e.g.:
 			#	media_output['MediaContainer']['Metadata'][0]['title'] returns title of media
 			#	media_output['MediaContainer']['Metadata'][0]['Media'][0]['Part'][0]['file'] returns filepath to media file
 			#If you want to run a shell command (like mkvinfo on the media file), you do the following:
