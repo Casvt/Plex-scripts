@@ -1,5 +1,8 @@
 #!/usr/bin/python3
 
+#The use case of this script is the following:
+#	Download the poster of every entry in the library that you give to the destination foldr (.png)
+
 plex_ip = ''
 plex_port = ''
 plex_api_token = ''
