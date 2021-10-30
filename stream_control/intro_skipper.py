@@ -2,6 +2,10 @@
 
 #The use case of this script is the following:
 #	Automatically skip intro's and advertisements of the media (plex pass needed for plex to mark intro's and advertisements in media files)
+#REQUIREMENTS (pip3 install ...):
+#	PlexAPI
+#	websocket
+#	requests
 
 plex_ip = ''
 plex_port = ''
