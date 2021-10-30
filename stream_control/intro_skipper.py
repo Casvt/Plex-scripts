@@ -45,8 +45,8 @@ def move(data):
 		plex.client(media_session[data['PlaySessionStateNotification'][0]['ratingKey']]['Player']['title'], identifier=data['PlaySessionStateNotification'][0]['clientIdentifier']).seekTo(level['endTimeOffset'], mtype='video')
 
 def process(data):
-	print(json.dumps(data, indent=4))
 	if data['type'] == 'playing':
+		print(json.dumps(data, indent=4))
 		if data['PlaySessionStateNotification'][0]['ratingKey'] in media_session.keys() and not media_session[data['PlaySessionStateNotification'][0]['ratingKey']]['Session']['location'] == 'lan': return
 		if not data['PlaySessionStateNotification'][0]['ratingKey'] in media_output.keys(): media_output[data['PlaySessionStateNotification'][0]['ratingKey']] = json.loads(requests.get('http://' + plex_ip + ':' + str(plex_port) + data['PlaySessionStateNotification'][0]['key'], params={'X-Plex-Token': plex_api_token}, headers={'Accept': 'application/json'}).text)
 		if not data['PlaySessionStateNotification'][0]['ratingKey'] in media_chapters.keys() and 'Chapter' in media_output[data['PlaySessionStateNotification'][0]['ratingKey']]['MediaContainer']['Metadata'][0].keys(): media_chapters[data['PlaySessionStateNotification'][0]['ratingKey']] = media_output[data['PlaySessionStateNotification'][0]['ratingKey']]['MediaContainer']['Metadata'][0]['Chapter']
