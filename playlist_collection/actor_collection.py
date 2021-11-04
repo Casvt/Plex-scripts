@@ -3,6 +3,10 @@
 #The use case of this script is the following:
 #	Have a collection containing all the movies of the x first actors (and optionally of the movie director) of the last viewed movie
 #	The collection will be put in the library from where the source movie originated
+#REQUIREMENTS (pip3 install ...):
+#	PlexAPI
+#	websocket
+#	requests
 
 plex_ip = ''
 plex_port = ''
