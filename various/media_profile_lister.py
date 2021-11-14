@@ -40,7 +40,7 @@ for argument, value in arguments:
 					lib_id = level['key']
 					lib_type = level['type']
 		if not lib_id:
-			print('Library not found or not a movie library')
+			print('Library not found or not a movie/show library')
 			exit(1)
 	if argument in ('-p', '--Profile'): profile = value
 
