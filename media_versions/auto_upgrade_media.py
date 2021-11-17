@@ -29,7 +29,6 @@ sonarr_profile_720 = ''
 sonarr_profile_1080 = ''
 sonarr_profile_4k = ''
 
-from plexapi.server import PlexServer
 import requests
 import time
 import re
@@ -70,7 +69,6 @@ if radarr_ip or radarr_port or radarr_api_token:
 		exit(1)
 
 baseurl = 'http://' + plex_ip + ':' + plex_port
-plex = PlexServer(baseurl, plex_api_token)
 ssn = requests.Session()
 ssn.headers.update({'Accept': 'application/json'})
 ssn.params.update({'X-Plex-Token': plex_api_token})
