@@ -431,7 +431,6 @@ if __name__ == '__main__':
 
 	if not source_server_name or not target_server_name:
 		print('Error: Arguments were not all given')
-		help()
 		exit(1)
 
 	sync_session = sync(source_server_name, target_server_name, pre=True)
