@@ -102,6 +102,7 @@ def updown(media_info, queue, UpOrDown='down', last=False):
 		for key in queue.keys():
 			first_key = key
 			break
+		if not first_key: return queue
 		if 'series_id' in queue[str(first_key)].keys():
 			#queue is a sonarr queue; {'series_id_1': {'profile_id_1': ['episode_id_1', 'episode_id_2'], 'profile_id_2': ['episode_id_3', 'episode_id_4']}}
 			series_profileid_history = {}
