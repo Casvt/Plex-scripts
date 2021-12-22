@@ -99,6 +99,7 @@ def updown(media_info, queue, UpOrDown='down', last=False):
 	if not queue: queue = {}
 	if last == True:
 		#process queue
+		first_key = ''
 		for key in queue.keys():
 			first_key = key
 			break
