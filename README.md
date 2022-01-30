@@ -26,4 +26,7 @@ Otherwise, make a feature request in the [discord server](https://discord.gg/AbC
 ## I don't like BASH
 Yes I know. I'm slowly converting all bash scripts to python scripts.
 
-## Browse around and take a look! Happy "but's"-removing
+## You're such an amazing person, I want to sent you money!
+I don't accept money. I'm literally 16. You can "pay" me by sharing the repo with other people.
+
+### **Browse around and take a look! Happy "but's"-removing**
