@@ -10,6 +10,7 @@ Requirements (python3 -m pip install [requirement]):
 	websocket-client
 	requests
 Setup:
+	Fill the variables below firstly, then run the script.
 	Once this script is run, it will keep running and will handle the updating of the collection once needed.
 	Run it in the background as a service or as a cronjob.
 """
