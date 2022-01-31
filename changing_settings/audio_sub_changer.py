@@ -3,213 +3,164 @@
 
 """
 The use case of this script is the following:
-	Check every library given and if an episode/movie is viewed alot, upgrade it
-	and if it hasn't been viewed much, downgrade it; using sonarr and radarr
-	Radarr: script will change quality profile of movie and initiate search for it
-	Sonarr: script will change quality profile of series, initiate search for episodes and change quality profile of series back
+	Change the audio/subtitle track, based on target language, for an episode, season, series, movie or entire movie/show library
 Requirements (python3 -m pip install [requirement]):
 	requests
 Setup:
-	Fill the variables below firstly (plex required and atleast one of the arr's), then run the script.
-	Check the help page (python3 audio_upgrade_media.py --help) to see how to use the script with it's arguments.
-	When the script is run with it's arguments, it will show you what media it has processed and will let you know for what media it has made changes
+	Fill the variables below firstly, then run the script.
+	Check the help page (python3 audio_sub_changer.py --help) to see how to use the script with it's arguments.
+	You can find examples of the usage at the bottom of the help page.
+	When the script is run with it's arguments, it will show you what media it has processed and will let you know for what media it has changed and for which users
 """
 
 plex_ip = ''
 plex_port = ''
 plex_api_token = ''
 
-#atleast one is required; both is possible ofcourse if you want to up/downgrade both movies and episodes
-radarr_ip = ''
-radarr_port = ''
-radarr_api_token = ''
-#name of profile to apply to movie for every resolution (if you do not provide a name for a resolution, the script will not up/downgrade to that resolution)
-radarr_profile_480 = ''
-radarr_profile_720 = ''
-radarr_profile_1080 = ''
-radarr_profile_4k = ''
+import requests, argparse
 
-sonarr_ip = ''
-sonarr_port = ''
-sonarr_api_token = ''
-#name of profile to apply to series for every resolution (series profile is changed, episodes are searched and profile will be changed back) (if you do not provide a name for a resolution, the script will not up/downgrade to that resolution)
-sonarr_profile_480 = ''
-sonarr_profile_720 = ''
-sonarr_profile_1080 = ''
-sonarr_profile_4k = ''
+def episode(episode_id, media_type="show"):
+	for token in users:
+		episode_output = requests.get(baseurl + '/library/metadata/' + str(episode_id), params={'X-Plex-Token': token}, headers={'Accept': 'application/json'}).json()
+		part_db = {}
+		if media_type == "show" and token == users[0]:
+			print(episode_output['MediaContainer']['Metadata'][0]['grandparentTitle'] + ' - S' + str(episode_output['MediaContainer']['Metadata'][0]['parentIndex']) + 'E' + str(episode_output['MediaContainer']['Metadata'][0]['index']) + ' - ' + str(episode_output['MediaContainer']['Metadata'][0]['title']))
+		elif media_type == "movie" and token == user[0]:
+			print(episode_output['MediaContainer']['Metadata'][0]['title'])
+		for media in episode_output['MediaContainer']['Metadata'][0]['Media']:
+			for part in media['Part']:
+				selected_stream = ''
+				for stream in part['Stream']:
+					if stream['streamType'] == args.Type and 'selected' in stream.keys() and 'languageTag' in stream.keys() and stream['languageTag'] == args.Language:
+						selected_stream = stream
+						break
+				part_db[part['id']] = {
+					'part': part,
+					'selected_stream': selected_stream
+				}
+		for part in part_db.keys():
+			for stream in part_db[part]['part']['Stream']:
+				if stream['streamType'] == args.Type and 'languageTag' in stream.keys() and stream['languageTag'] == args.Language and not part_db[part]['selected_stream']:
+					if args.Type == 2:
+						requests.put(baseurl + '/library/parts/' + str(part), params={'audioStreamID': stream['id'], 'allParts': 1, 'X-Plex-Token': token})
+					elif args.Type == 3:
+						requests.put(baseurl + '/library/parts/' + str(part), params={'subtitleStreamID': stream['id'], 'allParts': 1, 'X-Plex-Token': token})
+					print(f'	Edited for {users_name[token]}')
+					break
 
-import requests, time, argparse
-
-if not (radarr_ip or radarr_port or radarr_api_token or sonarr_ip or sonarr_port or sonarr_api_token):
-	print("Error: must add atleast one *arr")
-	exit(1)
-if (radarr_ip or radarr_port or radarr_api_token) and not (radarr_ip and radarr_port and radarr_api_token):
-	print("Error: Not all Radarr info filled in")
-	exit(1)
-if (sonarr_ip or sonarr_port or sonarr_api_token) and not (sonarr_ip and sonarr_port and sonarr_api_token):
-	print("Error: Not all Sonarr info filled in")
-	exit(1)
-
-baseurl = 'http://' + plex_ip + ':' + plex_port
+#setup variables
 ssn = requests.Session()
 ssn.headers.update({'Accept': 'application/json'})
 ssn.params.update({'X-Plex-Token': plex_api_token})
+baseurl = 'http://' + plex_ip + ':' + plex_port
+section_output = ssn.get(baseurl + '/library/sections').json()
+langs = ['aa', 'ab', 'af', 'ak', 'am', 'an', 'ar', 'as', 'av', 'ay', 'az', 'ba', 'be', 'bg', 'bh', 'bi', 'bm', 'bn', 'bo', 'br', 'bs', 'ca', 'ce', 'ch', 'co', 'cr', 'cs', 'cu', 'cv', 'cy', 'da', 'de', 'dv', 'dz', 'ee', 'el', 'en', 'en-US', 'en-GB', 'en-AU', 'eo', 'es', 'et', 'eu', 'fa', 'ff', 'fi', 'fj', 'fo', 'fr', 'fy', 'ga', 'gd', 'gl', 'gn', 'gu', 'gv', 'ha', 'he', 'hi', 'ho', 'hr', 'ht', 'hu', 'hy', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'io', 'is', 'it', 'iu', 'ja', 'jv', 'ka', 'kg', 'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'kr', 'ks', 'ku', 'kv', 'kw', 'ky', 'la', 'lb', 'lg', 'li', 'ln', 'lo', 'lt', 'lu', 'lv', 'mg', 'mh', 'mi', 'mk', 'ml', 'mn', 'mo', 'mr', 'ms', 'mt', 'my', 'na', 'nb', 'nd', 'ne', 'ng', 'nl', 'nn', 'no', 'nr', 'nv', 'ny', 'oc', 'oj', 'om', 'or', 'os', 'pa', 'pi', 'pl', 'ps', 'pt', 'qu', 'rm', 'rn', 'ro', 'ru', 'rw', 'sa', 'sc', 'sd', 'se', 'sg', 'sh', 'si', 'sk', 'sl', 'sm', 'sn', 'so', 'sq', 'sr', 'ss', 'st', 'su', 'sv', 'sw', 'ta', 'te', 'tg', 'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tr', 'ts', 'tt', 'tw', 'ty', 'ug', 'uk', 'ur', 'uz', 've', 'vi', 'vo', 'wa', 'wo', 'xh', 'yi', 'yo', 'za', 'zh', 'zu']
 
-res_ladder = {}
-res_ladder['480'] = {"Downgrade": False, "Upgrade": {"movie": radarr_profile_720, "episode": sonarr_profile_720}}
-res_ladder['720'] = {"Downgrade": {"movie": radarr_profile_480, "episode": sonarr_profile_480}, "Upgrade": {"movie": radarr_profile_1080, "episode": sonarr_profile_1080}}
-res_ladder['1080'] = {"Downgrade": {"movie": radarr_profile_720, "episode": sonarr_profile_720}, "Upgrade": {"movie": radarr_profile_4k, "episode": sonarr_profile_4k}}
-res_ladder['4k'] = {"Downgrade": {"movie": radarr_profile_1080, "episode": sonarr_profile_1080}, "Upgrade": False}
-
-def updown(media_info, queue, UpOrDown='down', last=False):
-	if not queue: queue = {}
-	if last == True:
-		#process queue
-		first_key = ''
-		for key in queue.keys():
-			first_key = key
-			break
-		if not first_key: return queue
-		if 'series_id' in queue[str(first_key)].keys():
-			#queue is a sonarr queue; {'series_id_1': {'profile_id_1': ['episode_id_1', 'episode_id_2'], 'profile_id_2': ['episode_id_3', 'episode_id_4']}}
-			series_profileid_history = {}
-			for key in queue.keys():
-				#do this for every series
-				series_output = requests.get('http://' + str(sonarr_ip) + ':' + str(sonarr_port) + '/api/v3/series/' + str(key), params={'apikey': sonarr_api_token}).json()
-				series_profileid_history[str(key)] = series_output['qualityProfileId']
-				for profile in queue[key].keys():
-					#do this for every profile that an episode in the series needs to be searched with
-					series_output['qualityProfileId'] = profile
-					requests.put('http://' + str(sonarr_ip) + ':' + str(sonarr_port) + '/api/v3/series/' + str(key), json=series_output, params={'apikey': sonarr_api_token})
-					requests.post('http://' + str(sonarr_ip) + ':' + str(sonarr_port) + '/api/v3/command', json={'name': 'EpisodeSearch', 'episodeIds': queue[key][profile]})
-				#every episode of the series that needed to be up/downgraded has been searched so change profile of series back to what is was
-				series_output['qualityProfileId'] = series_profileid_history[str(key)]
-				requests.put('http://' + str(sonarr_ip) + ':' + str(sonarr_port) + '/api/v3/series/' + str(key), json=series_output, params={'apikey': sonarr_api_token})
-		else:
-			#queue is a radarr queue; {'profile_id_1': ['movie_id_1', 'movie_id_2'], 'profile_id_2': ['movie_id_3', 'movie_id_4']}
-			research_queue = []
-			for key in queue.keys():
-				#do this for every profile that movies need to be up/downgraded to
-				requests.put('http://' + radarr_ip + ':' + radarr_port + '/api/v3/movie/editor', json={'movieIds': queue[key], 'qualityProfileId': int(key)}, params={'apikey': radarr_api_token})
-				for item in queue[key]:
-					#add every movie's id to a list to initiate a search for
-					research_queue.append(item)
-			#initiate a search for every movie that has changed in quality profile
-			requests.post('http://' + radarr_ip + ':' + radarr_port + '/api/v3/command', json={'movieIds': research_queue, 'name': "MoviesSearch"}, params={'apikey': radarr_api_token})
-		return queue
-	movie_id = ''
-	profile_id = ''
-	#get the name of the new quality profile for the media
-	if UpOrDown == 'down': profile_name = res_ladder[str(media_info['Media'][0]['videoResolution'])]['Downgrade'][media_info['type']]
-	elif UpOrDown == 'up': profile_name = res_ladder[str(media_info['Media'][0]['videoResolution'])]['Upgrade'][media_info['type']]
-	if not profile_name: return queue
-	filepath_current_file = media_info['Media'][0]['Part'][0]['file']
-	if media_info['type'] == 'movie':
-		#media is a movie
-		#get the radarr id of the movie
-		for movie in radarr_movies_output:
-			if 'movieFile' in movie.keys() and movie['movieFile']['path'] == filepath_current_file:
-				movie_id = movie['id']
-				break
-		if not movie_id: return queue
-		#get the profile id for the new profile
-		for profile in radarr_profiles_output:
-			if profile['name'] == profile_name:
-				profile_id = profile['id']
-				break
-		if not profile_id: return queue
-		#add movie to the queue
-		if not str(profile_id) in queue.keys(): queue[str(profile_id)] = []
-		queue[str(profile_id)].append(int(movie_id))
-
-	elif media_info['type'] == 'episode':
-		#media is an episode
-		#get sonarr info about episode and note series id and episode id
-		episode_info = requests.get('http://' + sonarr_ip + ':' + sonarr_port + '/api/v3/parse', params={'apikey': sonarr_api_token, 'path': filepath_current_file}).json()['episodes'][0]
-		series_id = episode_info['seriesId']
-		episode_id = episode_info['id']
-		if not series_id or not episode_id: return queue
-		#get the profile id for the new profile
-		for profile in sonarr_profile_output:
-			if profile['name'] == profile_name:
-				profile_id = profile['id']
-				break
-		if not profile_id: return queue
-		#add episode to the queue
-		if not str(series_id) in queue.keys(): queue[str(series_id)] = {}
-		if not str(profile_id) in queue[str(series_id)].keys(): queue[str(series_id)][str(profile_id)] = []
-		if not str(episode_id) in queue[str(series_id)][str(profile_id)]: queue[str(series_id)][str(profile_id)].append(int(episode_id))
-	return queue
-
-
-def updownCheck(media_info, media_indentation):
-	#look at media and decide if media needs to be up/downgraded
-	if args.DowngradeDays != None and 'lastViewedAt' in media_info.keys() and media_info['lastViewedAt'] < time.time() - (86400 * args.DowngradeDays):
-		print(media_indentation + 'DOWNGRADING: Last time viewed was more than ' + str(args.DowngradeDays) + ' days ago')
-		return updown(media_info, edit_queue, 'down')
-
-	elif args.DowngradeViewcount != None and 'viewCount' in media_info.keys() and media_info['viewCount'] <= args.DowngradeViewcount:
-		print(media_indentation + 'DOWNGRADING: View count is lower or equal to ' + str(args.DowngradeViewcount))
-		return updown(media_info, edit_queue, 'down')
-
-	elif args.UpgradeDays != None and 'lastViewedAt' in media_info.keys() and media_info['lastViewedAt'] > time.time() - (86400 * args.UpgradeDays):
-		print(media_indentation + 'UPGRADING: Last time viewed was within ' + str(args.UpgradeDays) + ' days')
-		return updown(media_info, edit_queue, 'up')
-
-	elif args.UpgradeViewcount != None and 'viewCount' in media_info.keys() and media_info['viewCount'] > args.UpgradeViewcount:
-		print(media_indentation + 'UPGRADING: View count is higher than ' + str(args.UpgradeViewcount))
-		return updown(media_info, edit_queue, 'up')
-	else: return edit_queue
-
-section_output = ssn.get('http://' + plex_ip + ':' + plex_port + '/library/sections').json()
-
-#process arguments
-parser = argparse.ArgumentParser(description="Automatically up-/downgrade media based on popularity")
-parser.add_argument('-l','--LibraryName', help="Name of target library (movie or show library); allowed to pass this argument multiple times; also allowed to mix show and movie libraries", required=True, type=str, action='append')
-parser.add_argument('-d','--DowngradeDays', help="The amount of days that the media has not been watched before downgrading one resolution (4k -> 1080p -> 720p)", type=int)
-parser.add_argument('-D','--DowngradeViewcount', help="The viewcount which the video should be below or equal to to downgrade it (4k -> 1080p -> 720p)", type=int)
-parser.add_argument('-u','--UpgradeDays', help="The amount of days which the last watch date should fall within to upgrade (e.g. 7 = if the movie has been watched within the last 7 days, upgrade it) (720p -> 1080p -> 4k)", type=int)
-parser.add_argument('-U','--UpgradeViewcount', help="The viewcount which the video should be above to upgrade it (720p -> 1080p -> 4k)", type=int)
+#handle argument parsing
+parser = argparse.ArgumentParser(
+	formatter_class=argparse.RawDescriptionHelpFormatter,
+	description="Change the audio/subtitle track, based on target language, for an episode, season, series, movie or entire movie/show library\n\n\
+You can narrow down the media that is processed (normally the complete library) by specifying the series, season or even specific episode that you want to process for a show library,\n\
+or a movie for a movie library. If you've selected a movie library, you can parse the -m/--Movie argument multiple times to process multiple movies.",
+	epilog=f"Examples:\n\
+	python3 {__file__} --Type audio --Language fr --LibraryName Tv-series\n\
+		Try to set the audio for all episodes of all series in the 'Tv-series' library to one with the language French\n\
+	python3 {__file__} --Type subtitle --Language en --LibraryName Tv-series --Series 'Initial D' --SeasonNumber 5\n\
+		Try to set the subtitle for Tv-series->Initial D->S05 to one with the language English\n\
+	python3 {__file__} --Type subtitle --Language en --LibraryName Films --Movie '2 Fast 2 Furious' --Movie 'The Fast and The Furious'\n\
+		Try to set the subtitle for Films->2 Fast 2 Furious AND ALSO Films->The Fast and The Furious to one with the language English"
+)
+parser.add_argument('-t', '--Type', choices=['audio','subtitle'], help="Give the type of stream to change", required=True)
+parser.add_argument('-l', '--Language', type=str, help="ISO-639-1 (2 lowercase letters) language code (e.g. en) to try to set the stream to", required=True)
+parser.add_argument('-L', '--LibraryName', type=str, help="Name of target library", required=True)
+parser.add_argument('-S', '--Series', type=str, help="Target series name")
+parser.add_argument('-s', '--SeasonNumber', type=int, help="Target Season number")
+parser.add_argument('-e', '--EpisodeNumber', type=int, help="Target Episode number")
+parser.add_argument('-m', '--Movie', type=str, help="Target movie; allowed to give argument multiple times", action='append')
+parser.add_argument('-u', '--User', type=str, help="Select the user(s) to apply this to; Give username, '@me' for yourself or '@all' for everyone", action='append')
 args = parser.parse_args()
-lib_ids = []
-lib_types = {}
-for lib in args.LibraryName:
-	for level in section_output['MediaContainer']['Directory']:
-		if level['title'] in args.LibraryName:
-			if (level['type'] == 'movie' and radarr_ip) or (level['type'] == 'show' and sonarr_ip):
-				lib_ids.append(level['key'])
-				lib_types[level['key']] = level['type']
-			else: parser.error('Library ' + str(level['title']) + ' is not a movie/show library or the *arr for that type of library isn\'t setup')
-if args.DowngradeDays == None and args.DowngradeViewcount == None and args.UpgradeDays == None and args.UpgradeViewcount == None:
-	parser.error('Atleast one of the following arguments need to be given: -d/--DowngradeDays, -D/--DowngradeViewcount, -u/--UpgradeDays, -U/--UpgradeViewcount')
+if args.Type == 'audio': args.Type = 2
+elif args.Type == 'subtitle': args.Type = 3
+if not args.Language in langs: parser.error('-l/--Language requires a valid language code')
+if isinstance(args.SeasonNumber, int) and (args.Series == None): parser.error('-s/--SeasonNumber requires -S/--Series')
+if isinstance(args.EpisodeNumber, int) and (args.Series == None or args.SeasonNumber == None): parser.error('-e/--EpisodeNumber requires -S/--Series and -s/--SeasonNumber')
+for level in section_output['MediaContainer']['Directory']:
+	if level['title'] == args.LibraryName and level['type'] in ('show','movie'):
+		args.LibraryName = level['key']
+		break
+else: parser.error('Library not found')
+if args.Series != None:
+	for level in ssn.get(baseurl + '/library/sections/' + args.LibraryName + '/all').json()['MediaContainer']['Metadata']:
+		if level['title'] == args.Series:
+			args.Series = level['ratingKey']
+			break
+	else: parser.error('Series not found')
+if args.SeasonNumber != None:
+	for level in ssn.get(baseurl + '/library/metadata/' + args.Series + '/children').json()['MediaContainer']['Metadata']:
+		if level['index'] == args.SeasonNumber:
+			args.SeasonNumber = level['ratingKey']
+			break
+	else: parser.error('Season not found')
+if args.EpisodeNumber != None:
+	for level in ssn.get(baseurl + '/library/metadata/' + args.SeasonNumber + '/children').json()['MediaContainer']['Metadata']:
+		if level['index'] == args.EpisodeNumber:
+			args.EpisodeNumber = level['ratingKey']
+			break
+	else: parser.error('Episode not found')
+users = []
+users_name = {}
+if args.User == None:
+	users = [plex_api_token]
+	users_name = {plex_api_token: 'yourself'}
+else:
+	import re
+	user_share_output = requests.get('http://plex.tv/api/servers/' + ssn.get(baseurl + '/').json()['MediaContainer']['machineIdentifier'] + '/shared_servers', params={'X-Plex-Token': plex_api_token}).text
+	if '@all' in args.User:
+		for user_data in re.findall('(?<=username=").*accessToken=".*?(?=" )', user_share_output):
+			user_token = str(re.search('[^"]+$', user_data).group(0))
+			users.append(user_token)
+			users_name[user_token] = str(re.search('^.*?(?=" )', user_data).group(0))
+	else:
+		for user in args.User:
+			if user == '@me':
+				users.append(plex_api_token)
+				users_name[plex_api_token] = 'yourself'
+				continue
+			else:
+				try:
+					pre_user_token = str(re.search('(?<=username="' + user + '").*accessToken=".*?(?=")', user_share_output).group(0))
+					user_token = str(re.search('[^"]+$', pre_user_token).group(0))
+					users.append(user_token)
+					users_name[user_token] = str(re.search('^.*?(?=" )', user_data).group(0))
 
-radarr_movies_output = ''
-radarr_profiles_output = ''
-sonarr_profile_output = ''
-for lib in lib_ids:
-	#do this for every library
-	edit_queue = {}
-	lib_output = ssn.get(baseurl + '/library/sections/' + lib + '/all').json()
-	if lib_types[lib] == 'movie':
-		#lib is a movie lib
-		if not radarr_movies_output: radarr_movies_output = requests.get('http://' + radarr_ip + ':' + radarr_port + '/api/v3/movie', params={'apikey': radarr_api_token}).json()
-		if not radarr_profiles_output: radarr_profiles_output = requests.get('http://' + radarr_ip + ':' + radarr_port + '/api/v3/qualityprofile', params={'apikey': radarr_api_token}).json()
-		for movie in lib_output['MediaContainer']['Metadata']:
-			#do this for every movie in the lib
-			print(movie['title'])
-			edit_queue = updownCheck(movie, '	')
+				except AttributeError:
+					parser.error(f'{user} not found on server')
 
-	elif lib_types[lib] == 'show':
-		#lib is a show lib
-		if not sonarr_profile_output: sonarr_profile_output = requests.get('http://' + sonarr_ip + ':' + sonarr_port + '/api/v3/qualityprofile', params={'apikey': sonarr_api_token}).json()
+#edit the media
+if args.EpisodeNumber != None:
+	#change an episode
+	episode(args.EpisodeNumber)
+elif args.SeasonNumber != None:
+	#change a season
+	for episodes in ssn.get(baseurl + '/library/metadata/' + args.SeasonNumber + '/children').json()['MediaContainer']['Metadata']:
+		episode(episodes['ratingKey'])
+elif args.Series != None:
+	#change a series
+	for episodes in ssn.get(baseurl + '/library/metadata/' + args.Series + '/allLeaves').json()['MediaContainer']['Metadata']:
+		episode(episodes['ratingKey'])
+else:
+	lib_output = ssn.get(baseurl + '/library/sections/' + args.LibraryName + '/all').json()
+	if lib_output['MediaContainer']['Metadata'][0]['type'] == 'show':
+		#change a complete show library
 		for show in lib_output['MediaContainer']['Metadata']:
-			#do this for every show in the lib
-			print(show['title'])
-			for episode in ssn.get(baseurl + '/library/metadata/' + show['ratingKey'] + '/allLeaves').json()['MediaContainer']['Metadata']:
-				#do this for every episode of the show
-				print('	' + show['title'] + ' - S' + str(episode['parentIndex']) + 'E' + str(episode['index']) + ' - ' + episode['title'])
-				episode_output = ssn.get(baseurl + '/library/metadata/' + episode['ratingKey']).json()['MediaContainer']['Metadata'][0]
-				edit_queue = updownCheck(episode_output, '		')
-
-	#send off the queue that we made
-	updown('GiraffesAreCool', edit_queue, last=True)
+			for episodes in ssn.get(baseurl + '/library/metadata/' + show['ratingKey'] + '/allLeaves').json()['MediaContainer']['Metadata']:
+				episode(episodes['ratingKey'])
+	elif lib_output['MediaContainer']['Metadata'][0]['type'] == 'movie':
+		#change a complete movie library
+		if args.Series != None or args.SeasonNumber != None or args.EpisodeNumber != None:
+			parser.error('Library is a movie library but show-arguments were given')
+		for movie in lib_output['MediaContainer']['Metadata']:
+			if args.Movie != None and not str(movie['title']) in args.Movie: continue
+			episode(movie['ratingKey'], media_type="movie")
+	else:
+		parser.error('Library is not a show or movie library')
