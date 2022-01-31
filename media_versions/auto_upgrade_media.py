@@ -1,10 +1,13 @@
 #!/usr/bin/python3
+#-*- encoding: utf-8 -*-
 
-#The use case of this script is the following:
-#	Check every library in the list below and if an episode/movie is viewed alot, upgrade it
-#	and if it hasn't been viewed much, downgrade it; using sonarr and radarr
-#	Radarr: script will change quality profile of movie and initiate search for it
-#	Sonarr: script will change quality profile of series, initiate search for episodes and change quality profile of series back
+"""
+The use case of this script is the following:
+	Check every library given and if an episode/movie is viewed alot, upgrade it
+	and if it hasn't been viewed much, downgrade it; using sonarr and radarr
+	Radarr: script will change quality profile of movie and initiate search for it
+	Sonarr: script will change quality profile of series, initiate search for episodes and change quality profile of series back
+"""
 
 plex_ip = ''
 plex_port = ''
@@ -29,44 +32,17 @@ sonarr_profile_720 = ''
 sonarr_profile_1080 = ''
 sonarr_profile_4k = ''
 
-import requests
-import time
-import re
-import getopt
-import sys
+import requests, time, argparse
 
 if not (radarr_ip or radarr_port or radarr_api_token or sonarr_ip or sonarr_port or sonarr_api_token):
 	print("Error: must add atleast one *arr")
 	exit(1)
-if not re.search('^(\d{1,3}\.){3}\d{1,3}$', plex_ip):
-	print("Error: " + plex_ip + " is not a valid ip")
+if (radarr_ip or radarr_port or radarr_api_token) and not (radarr_ip and radarr_port and radarr_api_token):
+	print("Error: Not all Radarr info filled in")
 	exit(1)
-if not re.search('^\d{1,5}$', plex_port):
-	print("Error: " + plex_port + " is not a valid port")
+if (sonarr_ip or sonarr_port or sonarr_api_token) and not (sonarr_ip and sonarr_port and sonarr_api_token):
+	print("Error: Not all Sonarr info filled in")
 	exit(1)
-if not re.search('^[\w\d_-~]{19,21}$', plex_api_token):
-	print("Error: " + plex_api_token + " is not a valid api token")
-	exit(1)
-if sonarr_ip or sonarr_port or sonarr_api_token:
-	if not re.search('^(\d{1,3}\.){3}\d{1,3}$', sonarr_ip):
-		print("Error: " + sonarr_ip + " is not a valid ip")
-		exit(1)
-	if not re.search('^\d{1,5}$', sonarr_port):
-		print("Error: " + sonarr_port + " is not a valid port")
-		exit(1)
-	if not re.search('^[a-z0-9]{30,36}$', sonarr_api_token):
-		print("Error: " + sonarr_api_token + " is not a valid api token")
-		exit(1)
-if radarr_ip or radarr_port or radarr_api_token:
-	if not re.search('^(\d{1,3}\.){3}\d{1,3}$', radarr_ip):
-		print("Error: " + radarr_ip + " is not a valid ip")
-		exit(1)
-	if not re.search('^\d{1,5}$', radarr_port):
-		print("Error: " + radarr_port + " is not a valid port")
-		exit(1)
-	if not re.search('^[a-z0-9]{30,36}$', radarr_api_token):
-		print("Error: " + radarr_api_token + " is not a valid api token")
-		exit(1)
 
 baseurl = 'http://' + plex_ip + ':' + plex_port
 ssn = requests.Session()
@@ -78,22 +54,6 @@ res_ladder['480'] = {"Downgrade": False, "Upgrade": {"movie": radarr_profile_720
 res_ladder['720'] = {"Downgrade": {"movie": radarr_profile_480, "episode": sonarr_profile_480}, "Upgrade": {"movie": radarr_profile_1080, "episode": sonarr_profile_1080}}
 res_ladder['1080'] = {"Downgrade": {"movie": radarr_profile_720, "episode": sonarr_profile_720}, "Upgrade": {"movie": radarr_profile_4k, "episode": sonarr_profile_4k}}
 res_ladder['4k'] = {"Downgrade": {"movie": radarr_profile_1080, "episode": sonarr_profile_1080}, "Upgrade": False}
-
-def help():
-	print('	-h/--Help')
-	print('		Display this help message')
-	print('Required:')
-	print('	-l/--LibraryName [name of target library (movie or show library)')
-	print('		Pass this argument multiple times to apply the script to multiple libraries; movie and show libraries are allowed to be mixed')
-	print('At least one required:')
-	print('	-d/--DowngradeDays [number]')
-	print('		The amount of days that the media has not been watched before downgrading one resolution (4k -> 1080p -> 720p)')
-	print('	-D/--DowngradeViewCount [number]')
-	print('		The viewcount which the video should be below or equal to to downgrade it (4k -> 1080p -> 720p)')
-	print('	-u/--UpgradeDays [number]')
-	print('		The amount of days which the last watch date should fall within to upgrade (e.g. 7 = if the movie has been watched within the last 7 days, upgrade it) (720p -> 1080p -> 4k)')
-	print('	-U/--UpgradeViewCount [number]')
-	print('		The viewcount which the video should be above to upgrade it (720p -> 1080p -> 4k)')
 
 def updown(media_info, queue, UpOrDown='down', last=False):
 	if not queue: queue = {}
@@ -173,81 +133,53 @@ def updown(media_info, queue, UpOrDown='down', last=False):
 		if not str(series_id) in queue.keys(): queue[str(series_id)] = {}
 		if not str(profile_id) in queue[str(series_id)].keys(): queue[str(series_id)][str(profile_id)] = []
 		if not str(episode_id) in queue[str(series_id)][str(profile_id)]: queue[str(series_id)][str(profile_id)].append(int(episode_id))
-	
 	return queue
 
 
 def updownCheck(media_info, media_indentation):
 	#look at media and decide if media needs to be up/downgraded
-	if downgrade_days and 'lastViewedAt' in media_info.keys() and media_info['lastViewedAt'] < time.time() - (86400 * downgrade_days):
-		print(media_indentation + 'DOWNGRADING: Last time viewed was more than ' + str(downgrade_days) + ' days ago')
+	if args.DowngradeDays != None and 'lastViewedAt' in media_info.keys() and media_info['lastViewedAt'] < time.time() - (86400 * args.DowngradeDays):
+		print(media_indentation + 'DOWNGRADING: Last time viewed was more than ' + str(args.DowngradeDays) + ' days ago')
 		return updown(media_info, edit_queue, 'down')
 
-	elif downgrade_viewcount and 'viewCount' in media_info.keys() and media_info['viewCount'] <= downgrade_viewcount:
-		print(media_indentation + 'DOWNGRADING: View count is lower or equal to ' + str(downgrade_viewcount))
+	elif args.DowngradeViewcount != None and 'viewCount' in media_info.keys() and media_info['viewCount'] <= args.DowngradeViewcount:
+		print(media_indentation + 'DOWNGRADING: View count is lower or equal to ' + str(args.DowngradeViewcount))
 		return updown(media_info, edit_queue, 'down')
 
-	elif upgrade_days and 'lastViewedAt' in media_info.keys() and media_info['lastViewedAt'] > time.time() - (86400 * upgrade_days):
-		print(media_indentation + 'UPGRADING: Last time viewed was within ' + str(upgrade_days) + ' days')
+	elif args.UpgradeDays != None and 'lastViewedAt' in media_info.keys() and media_info['lastViewedAt'] > time.time() - (86400 * args.UpgradeDays):
+		print(media_indentation + 'UPGRADING: Last time viewed was within ' + str(args.UpgradeDays) + ' days')
 		return updown(media_info, edit_queue, 'up')
 
-	elif upgrade_viewcount and 'viewCount' in media_info.keys() and media_info['viewCount'] > upgrade_viewcount:
-		print(media_indentation + 'UPGRADING: View count is higher than ' + str(upgrade_viewcount))
+	elif args.UpgradeViewcount != None and 'viewCount' in media_info.keys() and media_info['viewCount'] > args.UpgradeViewcount:
+		print(media_indentation + 'UPGRADING: View count is higher than ' + str(args.UpgradeViewcount))
 		return updown(media_info, edit_queue, 'up')
 	else: return edit_queue
 
 section_output = ssn.get('http://' + plex_ip + ':' + plex_port + '/library/sections').json()
-arguments, values = getopt.getopt(sys.argv[1:], 'hl:d:D:u:U:', ['Help', 'LibraryName=','DowngradeDays=','DowngradeViewcount=','UpgradeDays=','UpgradeViewcount='])
-#don't give any value to these variables; run python3 auto_upgrade_media.py --Help
-#process arguments gives and fill variables below with values of arguments
+
+#process arguments
+parser = argparse.ArgumentParser(description="Automatically up-/downgrade media based on popularity")
+parser.add_argument('-l','--LibraryName', help="Name of target library (movie or show library); allowed to pass this argument multiple times; also allowed to mix show and movie libraries", required=True, type=str, action='append')
+parser.add_argument('-d','--DowngradeDays', help="The amount of days that the media has not been watched before downgrading one resolution (4k -> 1080p -> 720p)", type=int)
+parser.add_argument('-D','--DowngradeViewcount', help="The viewcount which the video should be below or equal to to downgrade it (4k -> 1080p -> 720p)", type=int)
+parser.add_argument('-u','--UpgradeDays', help="The amount of days which the last watch date should fall within to upgrade (e.g. 7 = if the movie has been watched within the last 7 days, upgrade it) (720p -> 1080p -> 4k)", type=int)
+parser.add_argument('-U','--UpgradeViewcount', help="The viewcount which the video should be above to upgrade it (720p -> 1080p -> 4k)", type=int)
+args = parser.parse_args()
 lib_ids = []
 lib_types = {}
-downgrade_days = ''
-downgrade_viewcount = ''
-upgrade_days = ''
-upgrade_viewcount = ''
+for lib in args.LibraryName:
+	for level in section_output['MediaContainer']['Directory']:
+		if level['title'] in args.LibraryName:
+			if (level['type'] == 'movie' and radarr_ip) or (level['type'] == 'show' and sonarr_ip):
+				lib_ids.append(level['key'])
+				lib_types[level['key']] = level['type']
+			else: parser.error('Library ' + str(level['title']) + ' is not a movie/show library or the *arr for that type of library isn\'t setup')
+if args.DowngradeDays == None and args.DowngradeViewcount == None and args.UpgradeDays == None and args.UpgradeViewcount == None:
+	parser.error('Atleast one of the following arguments need to be given: -d/--DowngradeDays, -D/--DowngradeViewcount, -u/--UpgradeDays, -U/--UpgradeViewcount')
+
 radarr_movies_output = ''
 radarr_profiles_output = ''
 sonarr_profile_output = ''
-for argument, value in arguments:
-	if argument in ('-h', '--Help'):
-		help()
-	if argument in ('-l', '--LibraryNames'):
-		lib_found = False
-		for level in section_output['MediaContainer']['Directory']:
-			if level['title'] in value:
-				if (level['type'] == 'movie' and radarr_ip) or (level['type'] == 'show' and sonarr_ip):
-					lib_found = True
-					lib_ids.append(level['key'])
-					lib_types[level['key']] = level['type']
-				else: print('Warning: library ' + str(value) + ' ignored as it isn\'t a movie/show library or the *arr for that type of lib isn\'t setup')
-		if lib_found == False: print('Warning: library ' + str(value) + ' ignored as it isn\'t found')
-	if argument in ('-d', '--DowngradeDays'):
-		if re.search('^\d+$', value): downgrade_days = int(value)
-		else:
-			print('Error: invalid number given for ' + argument)
-			exit(1)
-	if argument in ('-D', '--DowngradeViewCount'):
-		if re.search('^\d+$', value): downgrade_viewcount = int(value)
-		else:
-			print('Error: invalid number given for ' + argument)
-			exit(1)
-	if argument in ('-u', '--UpgradeDays'):
-		if re.search('^\d+$', value): upgrade_days = int(value)
-		else:
-			print('Error: invalid number given for ' + argument)
-			exit(1)
-	if argument in ('-U', '--UpgradeViewCount'):
-		if re.search('^\d+$', value): upgrade_viewcount = int(value)
-		else:
-			print('Error: invalid number given for ' + argument)
-			exit(1)
-
-if not lib_ids or not (downgrade_days or downgrade_viewcount or upgrade_days or upgrade_viewcount):
-	print('Error: Arguments were not all given')
-	help()
-	exit(1)
-
 for lib in lib_ids:
 	#do this for every library
 	edit_queue = {}
