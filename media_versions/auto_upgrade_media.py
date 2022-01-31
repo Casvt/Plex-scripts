@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-#-*- encoding: utf-8 -*-
+#-*- coding: utf-8 -*-
 
 """
 The use case of this script is the following:
