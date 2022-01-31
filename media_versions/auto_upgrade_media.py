@@ -7,6 +7,12 @@ The use case of this script is the following:
 	and if it hasn't been viewed much, downgrade it; using sonarr and radarr
 	Radarr: script will change quality profile of movie and initiate search for it
 	Sonarr: script will change quality profile of series, initiate search for episodes and change quality profile of series back
+Requirements (python3 -m pip install [requirement]):
+	requests
+Setup:
+	Fill the variables below firstly (plex required and atleast one of the arr's), then run the script.
+	Check the help page (python3 audio_upgrade_media.py --help) to see how to use the script with it's arguments.
+	When the script is run with it's arguments, it will show you what media it has processed and will let you know for what media it has made changes
 """
 
 plex_ip = ''
