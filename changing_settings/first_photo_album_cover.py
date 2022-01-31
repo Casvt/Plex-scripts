@@ -6,7 +6,7 @@ The use case of this script is the following:
 	The first image in an album will be made the cover of the album.
 	This script applies to every album in every directory (a.k.a every album that exists on your plex server)
 Requirements (python3 -m pip install [requirement]):
-	requests, PlexAPI
+	requests
 Setup:
 	Fill the variables below firstly, then run the script.
 	Run this script every once in a while. Every time it is run, the album covers will be updated.
