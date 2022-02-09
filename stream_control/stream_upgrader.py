@@ -301,7 +301,7 @@ def video(session, part_id, media_output=None):
 						media_key = search_result['key']
 
 	#change the stream if needed
-	if set_stream_source and set_stream_id and set_stream_count:
+	if set_stream_source and set_stream_count:
 		#better stream found so change it
 		client = plex.client(session['Player']['title'])
 		view_offset = session['viewOffset']
