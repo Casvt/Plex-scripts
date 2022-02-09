@@ -145,7 +145,7 @@ def audio(session, part_id, media_output=None):
 			for part in media['Part']:
 				if part['id'] == int(part_id):
 					for stream in part['Stream']:
-						if stream['streamType'] == 2 and int(stream['channels']) > channels:
+						if stream['streamType'] == 2 and ((set_stream_count > 0 and int(stream['channels']) > set_stream_count) or (set_stream_count == 0 and int(stream['channels']) > channels)):
 							set_stream_source = 'file'
 							set_stream_id = stream['id']
 							set_stream_count = int(stream['channels'])
@@ -166,7 +166,7 @@ def audio(session, part_id, media_output=None):
 			if not part['id'] == int(part_id):
 				logging.debug(json.dumps(part, indent=4))
 				for stream in part['Stream']:
-					if stream['streamType'] == 2 and int(stream['channels']) > set_stream_count:
+					if stream['streamType'] == 2 and ((set_stream_count > 0 and int(stream['channels']) > set_stream_count) or (set_stream_count == 0 and int(stream['channels']) > channels)):
 						set_stream_source = 'version'
 						set_stream_id = stream['id']
 						set_stream_count = int(stream['channels'])
@@ -189,7 +189,7 @@ def audio(session, part_id, media_output=None):
 					if not part['id'] == int(part_id):
 						logging.debug(json.dumps(part, indent=4))
 						for stream in part['Stream']:
-							if stream['streamType'] == 2 and int(stream['channels']) > set_stream_count:
+							if stream['streamType'] == 2 and ((set_stream_count > 0 and int(stream['channels']) > set_stream_count) or (set_stream_count == 0 and int(stream['channels']) > channels)):
 								set_stream_source = 'library'
 								set_stream_id = stream['id']
 								set_stream_count = int(stream['channels'])
@@ -212,7 +212,7 @@ def audio(session, part_id, media_output=None):
 						if not part['id'] == int(part_id):
 							logging.debug(json.dumps(part, indent=4))
 							for stream in part['Stream']:
-								if stream['streamType'] == 2 and int(stream['channels']) > set_stream_count:
+								if stream['streamType'] == 2 and ((set_stream_count > 0 and int(stream['channels']) > set_stream_count) or (set_stream_count == 0 and int(stream['channels']) > channels)):
 									set_stream_source = 'backup'
 									set_stream_id = stream['id']
 									set_stream_count = int(stream['channels'])
@@ -252,7 +252,7 @@ def audio(session, part_id, media_output=None):
 
 def video(session, part_id, media_output=None):
 	set_stream_source = ''
-	set_stream_count = ''
+	set_stream_count = 0
 	res = get_resolution(session)
 	if res == 'not-found':
 		return
@@ -264,7 +264,7 @@ def video(session, part_id, media_output=None):
 	for media in media_output['MediaContainer']['Metadata'][0]['Media']:
 		index += 1
 		res_number = int(media['videoResolution'].rstrip('k') + '000') if media['videoResolution'].endswith('k') else int(media['videoResolution'].rstrip('p'))
-		if res_number > res:
+		if ((set_stream_count > 0 and res_number > set_stream_count) or (set_stream_count == 0 and res_number > res)):
 			set_stream_source = 'version'
 			set_stream_count = res_number
 			media_index = index
@@ -279,7 +279,7 @@ def video(session, part_id, media_output=None):
 			for media in search_output['MediaContainer']['Metadata'][0]['Media']:
 				index += 1
 				res_number = int(media['videoResolution'].rstrip('k') + '000') if media['videoResolution'].endswith('k') else int(media['videoResolution'].rstrip('p'))
-				if res_number > set_stream_count:
+				if ((set_stream_count > 0 and res_number > set_stream_count) or (set_stream_count == 0 and res_number > res)):
 					set_stream_source = 'library'
 					set_stream_count = res_number
 					media_index = index
@@ -294,7 +294,7 @@ def video(session, part_id, media_output=None):
 				for media in search_output['MediaContainer']['Metadata'][0]['Media']:
 					index += 1
 					res_number = int(media['videoResolution'].rstrip('k') + '000') if media['videoResolution'].endswith('k') else int(media['videoResolution'].rstrip('p'))
-					if res_number > set_stream_count:
+					if ((set_stream_count > 0 and res_number > set_stream_count) or (set_stream_count == 0 and res_number > res)):
 						set_stream_source = 'backup'
 						set_stream_count = res_number
 						media_index = index
@@ -305,7 +305,7 @@ def video(session, part_id, media_output=None):
 		#better stream found so change it
 		client = plex.client(session['Player']['title'])
 		view_offset = session['viewOffset']
-		if set_stream_source == '':
+		if set_stream_soirce == '':
 			logging.info('No better video version was found')
 		elif set_stream_source == 'version':
 			logging.info(f'A better video stream has been found inside a different version of the file with the resolution of {set_stream_count}')
