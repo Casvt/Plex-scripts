@@ -126,7 +126,7 @@ def audio(session, part_id, media_output=None):
 	set_stream_source = ''
 	set_stream_id = ''
 	set_stream_count = ''
-	channels = get_channels(session)
+	channels = int(get_channels(session))
 	if channels == 'not-found':
 		return
 	logging.debug(f'Current channel count is {channels}')
@@ -140,13 +140,12 @@ def audio(session, part_id, media_output=None):
 		if media['id'] == int(media_id):
 			if media['audioChannels'] == channels:
 				#max channel count stream already streaming from file; continuing to next step
-				logging.debug('Audio stream is already the best inside the file; continuing')
 				break
 			#there is a better audio stream inside the file
 			for part in media['Part']:
 				if part['id'] == int(part_id):
 					for stream in part['Stream']:
-						if stream['streamType'] == 2 and stream['channels'] > channels:
+						if stream['streamType'] == 2 and int(stream['channels']) > channels:
 							set_stream_source = 'file'
 							set_stream_id = stream['id']
 							set_stream_count = int(stream['channels'])
@@ -167,7 +166,7 @@ def audio(session, part_id, media_output=None):
 			if not part['id'] == int(part_id):
 				logging.debug(json.dumps(part, indent=4))
 				for stream in part['Stream']:
-					if stream['streamType'] == 2 and stream['channels'] > set_stream_count:
+					if stream['streamType'] == 2 and int(stream['channels']) > set_stream_count:
 						set_stream_source = 'version'
 						set_stream_id = stream['id']
 						set_stream_count = int(stream['channels'])
@@ -190,7 +189,7 @@ def audio(session, part_id, media_output=None):
 					if not part['id'] == int(part_id):
 						logging.debug(json.dumps(part, indent=4))
 						for stream in part['Stream']:
-							if stream['streamType'] == 2 and stream['channels'] > set_stream_count:
+							if stream['streamType'] == 2 and int(stream['channels']) > set_stream_count:
 								set_stream_source = 'library'
 								set_stream_id = stream['id']
 								set_stream_count = int(stream['channels'])
@@ -213,7 +212,7 @@ def audio(session, part_id, media_output=None):
 						if not part['id'] == int(part_id):
 							logging.debug(json.dumps(part, indent=4))
 							for stream in part['Stream']:
-								if stream['streamType'] == 2 and stream['channels'] > set_stream_count:
+								if stream['streamType'] == 2 and int(stream['channels']) > set_stream_count:
 									set_stream_source = 'backup'
 									set_stream_id = stream['id']
 									set_stream_count = int(stream['channels'])
@@ -225,7 +224,9 @@ def audio(session, part_id, media_output=None):
 		#better stream found so change it
 		client = plex.client(session['Player']['title'])
 		view_offset = session['viewOffset']
-		if set_stream_source == 'file':
+		if set_stream_source == '':
+			logging.info('No better audio version was found')
+		elif set_stream_source == 'file':
 			logging.info(f'A better audio stream has been found inside the file with {set_stream_count} channels')
 			client.setAudioStream(audioStreamID=set_stream_id, mtype='video')
 		elif set_stream_source == 'version':
@@ -304,7 +305,9 @@ def video(session, part_id, media_output=None):
 		#better stream found so change it
 		client = plex.client(session['Player']['title'])
 		view_offset = session['viewOffset']
-		if set_stream_source == 'version':
+		if set_stream_soirce == '':
+			logging.info('No better video version was found')
+		elif set_stream_source == 'version':
 			logging.info(f'A better video stream has been found inside a different version of the file with the resolution of {set_stream_count}')
 			key = session['key']
 			media = plex.fetchItem(key)
