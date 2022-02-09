@@ -125,7 +125,7 @@ def get_resolution(session, formatted=True):
 def audio(session, part_id, media_output=None):
 	set_stream_source = ''
 	set_stream_id = ''
-	set_stream_count = ''
+	set_stream_count = 0
 	channels = int(get_channels(session))
 	if channels == 'not-found':
 		return
