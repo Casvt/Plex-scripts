@@ -1,47 +1,40 @@
-#used for converting an m3u file to a plex playlist
+#!/usr/bin/python3
+#-*- coding: utf-8 -*-
+
+"""
+The use case of this script is the following:
+	Converting an m3u file to a plex playlist
+Requirements (python3 -m pip install [requirement]):
+	requests
+Setup:
+	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
+"""
 
 plex_ip = ''
 plex_port = ''
 plex_api_token = ''
 
-import requests
-import json
-import getopt, sys
-import os
-import re
+import requests, argparse
+from os import path
 
-if not re.search('^(\d{1,3}\.){3}\d{1,3}$', plex_ip):
-	print("Error: " + plex_ip + " is not a valid ip")
-	exit(1)
+base_url = f'http://{plex_ip}:{plex_port}'
+ssn = requests.Session()
+ssn.headers.update({'Accept':'application/json'})
+ssn.params.update({'X-Plex-Token':plex_api_token})
 
-if not re.search('^\d{1,5}$', plex_port):
-	print("Error: " + plex_port + " is not a valid port")
-	exit(1)
-
-if not re.search('^[\w\d_-~]{19,21}$', plex_api_token):
-	print("Error: " + plex_api_token + " is not a valid api token")
-	exit(1)
-
-section_output = json.loads(requests.get('http://' + plex_ip + ':' + plex_port + '/library/sections', params={'X-Plex-Token': plex_api_token}, headers={'Accept': 'application/json'}).text)
-arguments, values = getopt.getopt(sys.argv[1:], 'l:f:', ['LibraryName=', 'File='].)
+section_output = ssn.get(f'{base_url}/library/sections').json()
+parser = argparse.ArgumentParser(description="Script to convert a .m3u file to a plex playlist")
+parser.add_argument('-l','--LibraryName', help="Name of target library", required=True)
+parser.add_argument('-f','--File', help="Path to .m3u file", required=True)
+args = parser.parse_args()
 lib_id = ''
-file_path = ''
-for argument, value in arguments:
-	if argument in ('-l', '--LibraryName'):
-		for level in section_output['MediaContainer']['Directory']:
-			if level['title'] == value: lib_id = level['key']
-		if not lib_id:
-			print('Library not found')
-			exit(1)
-	if argument in ('-f', '--File'):
-		file_path = value
-		if not os.path.exists(value):
-			print('File not found')
-			exit(1)
+for lib in section_output['MediaContainer']['Directory']:
+	if lib['title'] == args.LibraryName:
+		lib_id = lib['key']
+		break
+else:
+	parser.error('Library not found')
+if not path.exists(args.File):
+	parser.error('File not found')
 
-if not lib_id or not file_path:
-	print('Error: Arguments were not all given')
-	print('Required: -l/--LibraryName [name of target library], -f/--File [path to .m3u file]')
-	exit(1)
-
-requests.post('http://' + plex_ip + ':' + plex_port + '/playlists/upload', params={'X-Plex-Token': plex_api_token, 'sectionID': lib_id, 'path': file_path})
+ssn.post(f'{base_url}/playlists/upload', params={'sectionID': lib_id, 'path': args.File})
