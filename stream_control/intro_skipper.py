@@ -1,61 +1,115 @@
 #!/usr/bin/python3
+#-*- coding: utf-8 -*-
 
-#The use case of this script is the following:
-#	Automatically skip intro's and advertisements of the media (plex pass needed for plex to mark intro's and advertisements in media files)
-#REQUIREMENTS (pip3 install ...):
-#	PlexAPI
-#	websocket
-#	requests
+"""
+The use case of this script is the following:
+	Automatically skip intro's and advertisements of the media (plex pass needed for plex to automatically mark intro's and advertisements in media files)
+	Intro's and advertisements can be marked by markers or by chapters
+Requirements (python3 -m pip install [requirement]):
+	PlexAPI
+	websocket-client
+	requests
+Setup:
+	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
+	Once this script is run, it will keep running and will handle streams accordingly when needed.
+	Run it in the background as a service or as a '@reboot' cronjob (cron only available on unix systems (linux and mac)).
+"""
 
 plex_ip = ''
 plex_port = ''
 plex_api_token = ''
 
-import time
-import json
-import re
-import requests
+import time, requests, logging, argparse
 from plexapi.server import PlexServer
 
-plex = PlexServer('http://' + plex_ip + ':' + str(plex_port), plex_api_token)
-media_output = {}
-media_chapters = {}
-media_markers = {}
-media_session = {}
+base_url = f'http://{plex_ip}:{plex_port}'
+ssn = requests.Session()
+ssn.headers.update({'Accept': 'application/json'})
+ssn.params.update({'X-Plex-Token': plex_api_token})
+plex = PlexServer(base_url, plex_api_token)
 
-def move(data):
-	#media is inside chapter marked as advertisement or intro; check if media is played locally as we can only control stream on lan
-	if not data['PlaySessionStateNotification'][0]['ratingKey'] in media_session.keys():
-		for session in json.loads(requests.get('http://' + plex_ip + ':' + plex_port + '/status/sessions', params={'X-Plex-Token': plex_api_token}, headers={'Accept': 'application/json'}).text)['MediaContainer']['Metadata']:
-			if session['sessionKey'] == str(data['PlaySessionStateNotification'][0]['sessionKey']):
-				media_session[data['PlaySessionStateNotification'][0]['ratingKey']] = session
-	if media_session[data['PlaySessionStateNotification'][0]['ratingKey']]['Session']['location'] == 'lan':
-		#media is played on lan; move stream to end of chapter
-		plex.client(media_session[data['PlaySessionStateNotification'][0]['ratingKey']]['Player']['title'], identifier=data['PlaySessionStateNotification'][0]['clientIdentifier']).seekTo(level['endTimeOffset'], mtype='video')
+logging_level = logging.INFO
+logging.basicConfig(level=logging_level, format='[%(asctime)s][%(levelname)s] %(message)s', datefmt='%H:%M:%S %d-%m-20%y')
+
+parser = argparse.ArgumentParser(
+	description="Skip intro's and advertisements in media",
+	epilog=f"example:\n  {__file__} -i -a\n	Skip intro's and advertisements",
+	formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('-i','--Intro', help="Enable the script to skip intro's", action='store_true')
+parser.add_argument('-o','--Outro', help="Enable the script to skip outro's", action='store_true')
+parser.add_argument('-a','--Advertisements', help="Enable the script to skip advertisements", action='store_true')
+args = parser.parse_args()
+
+media_output = {}
+
+def move(player, time):
+	#move stream to end of chapter/marker
+	minutes = time / 1000 / 60
+	seconds = int(minutes % 1 * 60)
+	minutes = int(minutes)
+	logging.info(f'Moving stream playing on {player} to {minutes}:{seconds}')
+	try:
+		plex.client(player).seekTo(time, mtype='video')
+		logging.info('Success')
+	except Exception as e:
+		logging.exception('Failed: ')
+	return
+
+def chapter_check(data, rating_key, player):
+	#check if stream is currently in chapter that needs to be skipped
+	if 'Chapter' in media_output[rating_key].keys():
+		for chapter in media_output[rating_key]['Chapter']:
+			if not 'tag' in chapter.keys(): continue
+			if (args.Intro == True and chapter['tag'].lower() == 'intro') or (args.Outro == True and chapter['tag'].lower() == 'outro') or (args.Advertisements == True and chapter['tag'].lower() in ('ad','ads','advertisement','advertisements')):
+				if chapter['startTimeOffset'] <= data['viewOffset'] <= chapter['endTimeOffset']:
+					#current chapter needs to be skipped
+					move(player, chapter['endTimeOffset'])
+					return 'Moved'
+	return 'Not-Moved'
+
+def marker_check(data, rating_key, player):
+	#check if stream is currently in marker that needs to be skipped
+	if 'Marker' in media_output[rating_key].keys():
+		for marker in media_output[rating_key]['Marker']:
+			if not 'type' in marker.keys(): continue
+			if (args.Intro == True and marker['type'].lower() == 'intro') or (args.Outro == True and marker['type'].lower() == 'outro') or (args.Advertisements == True and marker['type'].lower() in ('ad','ads','advertisement','advertisements')):
+				if marker['startTimeOffset'] <= data['viewOffset'] <= marker['endTimeOffset']:
+					#current marked area needs to be skipped
+					move(player, marker['endTimeOffset'])
+					return 'Moved'
+	return 'Not-Moved'
 
 def process(data):
 	if data['type'] == 'playing':
-		if data['PlaySessionStateNotification'][0]['ratingKey'] in media_session.keys() and not media_session[data['PlaySessionStateNotification'][0]['ratingKey']]['Session']['location'] == 'lan':
+		logging.debug(data)
+		data = data['PlaySessionStateNotification'][0]
+		rating_key = str(data['ratingKey'])
+		for session in ssn.get(f'{base_url}/status/sessions').json()['MediaContainer']['Metadata']:
+			logging.debug(session)
+			if str(session['sessionKey']) == str(data['sessionKey']):
+				#session found
+				if not session['Session']['location'] == 'lan': return
+				media_output[rating_key] = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'includeChapters': 1, 'includeMarkers': 1}).json()['MediaContainer']['Metadata'][0]
+				logging.debug(media_output[rating_key])
+				#check for chapters and skip if needed
+				if chapter_check(data, rating_key, session['Player']['title']) == 'Moved': return
+				marker_check(data, rating_key, session['Player']['title'])
+				return
+		else:
+			logging.error('Not able to find session back in status')
 			return
-		if not data['PlaySessionStateNotification'][0]['ratingKey'] in media_output.keys():
-			media_output[data['PlaySessionStateNotification'][0]['ratingKey']] = json.loads(requests.get('http://' + plex_ip + ':' + str(plex_port) + data['PlaySessionStateNotification'][0]['key'], params={'X-Plex-Token': plex_api_token}, headers={'Accept': 'application/json'}).text)
-		if not data['PlaySessionStateNotification'][0]['ratingKey'] in media_chapters.keys() and 'Chapter' in media_output[data['PlaySessionStateNotification'][0]['ratingKey']]['MediaContainer']['Metadata'][0].keys():
-			media_chapters[data['PlaySessionStateNotification'][0]['ratingKey']] = media_output[data['PlaySessionStateNotification'][0]['ratingKey']]['MediaContainer']['Metadata'][0]['Chapter']
-		if not data['PlaySessionStateNotification'][0]['ratingKey'] in media_markers.keys() and 'Marker' in media_output[data['PlaySessionStateNotification'][0]['ratingKey']]['MediaContainer']['Metadata'][0].keys():
-			media_markers[data['PlaySessionStateNotification'][0]['ratingKey']] = media_output[data['PlaySessionStateNotification'][0]['ratingKey']]['MediaContainer']['Metadata'][0]['Marker']
-		for level in media_chapters[data['PlaySessionStateNotification'][0]['ratingKey']]:
-			if data['PlaySessionStateNotification'][0]['viewOffset'] >= level['startTimeOffset'] and data['PlaySessionStateNotification'][0]['viewOffset'] < level['endTimeOffset'] and 'tag' in level.keys() and level['tag'] == 'Advertisement':
-				move(data)
-				break
-		for level in media_markers[data['PlaySessionStateNotification'][0]['ratingKey']]:
-			if data['PlaySessionStateNotification'][0]['viewOffset'] >= level['startTimeOffset'] and data['PlaySessionStateNotification'][0]['viewOffset'] < level['endTimeOffset'] and 'type' in level.keys() and level['type'] == 'intro':
-				move(data)
-				break
 
 if __name__  == '__main__':
+	if args.Intro == False and args.Outro == False and args.Advertisements == False:
+		parser.print_help()
+		parser.error('At least one of three actions must be selected')
+	logging.info('Handling streams...')
+	if args.Intro == True: logging.info('Skipping intro\'s when needed')
+	if args.Outro == True: logging.info('Skipping outro\'s when needed')
+	if args.Advertisements == True: logging.info('Skipping advertisements when needed')
 	try:
 		listener = plex.startAlertListener(callback=process)
-		while True:
-			time.sleep(1)
+		while True: time.sleep(1)
 	except KeyboardInterrupt:
+		logging.info('Shutting down')
 		listener.stop()
