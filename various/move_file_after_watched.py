@@ -1,84 +1,89 @@
 #!/usr/bin/python3
-#-*- encoding: utf-8 -*-
+#-*- coding: utf-8 -*-
 
 """
 The use case of this script is the following:
 	After watching a movie, move the movie file from one folder to another.
 IMPORTANT:
-	The thing that will be moved is the movie file but the sub-folder that its in will also be copied
+	When the file is directly in the source folder, the file + .srt, .ass and .nfo files with the same name will be moved
+	When the file is in it's own sub-folder in the source folder, the complete folder that the file is in will be moved
 	EXAMPLE:
 		/mnt/plex-media/movies/cars/cars.mkv (movie file) + /mnt/plex-media/movies (source folder)
 		->
 		/mnt/plex-media-2/movies/cars/cars.mkv (/mnt/plex-media-2/movies = target folder)
 
 		/mnt/plex-media/movies/cars.mkv (movie file) + /mnt/plex-media/movies (source folder)
-                ->
-                /mnt/plex-media-2/movies/cars.mkv (/mnt/plex-media-2/movies = target folder)
-
-Requirements (pip3 install ...):
-	requests, PlexAPI
-
-To-Do:
-	1. Better argument parsing.
+		+ /mnt/plex-media/movies/cars.{srt,ass,nfo} (additional files)
+		->
+		/mnt/plex-media-2/movies/cars.mkv (/mnt/plex-media-2/movies = target folder)
+		+ /mnt/plex-media-2/movies/cars.{srt,ass,nfo}
+Requirements (python3 -m pip install [requirement]):
+	PlexAPI
+	websocket-client
+	requests
+Setup:
+	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
+	Once this script is run, it will keep running and will handle movie streams accordingly when needed.
+	Run it in the background as a service or as a '@reboot' cronjob (cron only available on unix systems (linux and mac)).
 """
 
 plex_ip = ''
 plex_port = ''
 plex_api_token = ''
 
-import requests
-import sys, getopt
-import time
-import os, shutil
+import requests, time, os ,shutil, argparse, logging
 from plexapi.server import PlexServer
 
-arguments, values = getopt.getopt(sys.argv[1:], 'S:T:', ['S=', 'T='])
-source_folder = ''
-target_folder = ''
-for argument, value in arguments:
-	if argument in ('-S', '--SourceFolder'):
-		if os.path.isdir(value):
-			source_folder = value
-		else:
-			print('Error: source folder not found')
-			exit(1)
-	if argument in ('-T', '--TargetFolder'):
-		if os.path.isdir(value):
-			target_folder = value
-		else:
-			print('Error: target folder not found')
-			exit(1)
-
-if not (source_folder and target_folder):
-	print('Error: Arguments were not all given')
-	print('Required:\n	-S/--SourceFolder [folder path]\n		If a movie whose file is in this folder or sub-folder of this folder, move it when watched')
-	print('	-T/--TargetFolder [folder path]\n		Move file/folder to here')
-	print('\nOnly the file is moved though any sub-folders that the file is in in the source folder are re-made in the target folder to keep folder structure.')
-	exit(1)
-
-baseurl = 'http://' + plex_ip + ':' + str(plex_port)
+baseurl = f'http://{plex_ip}:{plex_port}'
 plex = PlexServer(baseurl, plex_api_token)
 ssn = requests.Session()
 ssn.headers.update({'Accept': 'application/json'})
 ssn.params.update({'X-Plex-Token': plex_api_token})
+logging_level = logging.INFO
+logging.basicConfig(level=logging_level, format='[%(asctime)s][%(levelname)s] %(message)s', datefmt='%H:%M:%S %d-%m-20%y')
+
+parser = argparse.ArgumentParser(description="After watching a movie, the script will move the file to a different folder", epilog="See the top of the file for extra info about sub-folders")
+parser.add_argument('-S','--SourceFolder', help="Folder from which movie files will be moved", required=True)
+parser.add_argument('-T','--TargetFolder', help="Folder to which movie files will be moved", required=True)
+args = parser.parse_args()
+if not os.path.isdir(args.SourceFolder):
+	parser.error('Source folder doesn\'t exist')
+elif not args.SourceFolder.endsWith('/'):
+	args.SourceFolder += '/'
+if not os.path.isdir(args.TargetFolder):
+	parser.error('Target folder doesn\'t exis')
+elif not args.TargetFolder.endsWith('/'):
+	args.TargetFolder += '/'
+if args.SourceFolder == args.TargetFolder:
+	parser.error('Source folder and target folder are not allowed to be the same')
 
 def process(data):
+	if not 'PlaySessionStateNotification' in data.keys(): return
 	if data['PlaySessionStateNotification'][0]['state'] == 'stopped':
-		media_output = ssn.get(baseurl + '/library/metadata/' + str(data['PlaySessionStateNotification'][0]['ratingKey'])).json()
+		media_output = ssn.get(f'{baseurl}/library/metadata/{data["PlaySessionStateNotification"][0]["ratingKey"]}').json()
 		if media_output['MediaContainer']['Metadata'][0]['type'] == 'movie':
+			if 'viewOffset' in media_output['MediaContainer']['Metadata'][0].keys() and not 'viewCount' in media_output['MediaContainer']['Metadata'][0].keys(): return
 			for media in media_output['MediaContainer']['Metadata'][0]['Media']:
 				for part in media['Part']:
-					dest = os.path.join(target_folder, part['file'].lstrip(source_folder))
-					if str(dest) == str(part['file']): continue
-					os.makedirs(os.path.dirname(dest), exist_ok=True)
-					shutil.move(part['file'], dest)
-					print(part['file'] + ' moved to ' + dest)
+					if os.path.basename(part['file']) == os.path.relpath(part['file'], args.SourceFolder):
+						#move file with additional files (.srt, .ass and .nfo)
+						for extension in ('.srt','.ass','.nfo', os.path.splitext(part['file'])[-1]):
+							source = os.path.splitext(part['file'])[0] + extension
+							target = os.path.join(args.TargetFolder, os.path.relpath(os.path.splitext(part['file'])[0] + extension, args.SourceFolder))
+							shutil.move(source, target)
+							logging.info(f'{source} moved to {target}')
+					else:
+						#move folder
+						dest_folder = os.path.join(args.TargetFolder, os.path.relpath(os.path.dirname(part['file']), args.SourceFolder))
+						os.makedirs(os.path.dirname(dest_folder), exist_ok=True)
+						shutil.move(os.path.dirname(part['file']), dest_folder)
+						logging.info(f'{os.path.dirname(part["file"])} moved to {dest_folder}')
 
 if __name__  == '__main__':
 	try:
-		print('Watched movies will now be handled!')
+		logging.info('Handling movie streams...')
 		listener = plex.startAlertListener(callback=process)
-		while True:
-			time.sleep(1)
+		while True: time.sleep(5)
 	except KeyboardInterrupt:
+		logging.info('Shutting down')
 		listener.stop()
