@@ -1,73 +1,64 @@
 #!/usr/bin/python3
+#-*- coding: utf-8 -*-
 
-#The use case of this scriot is the following:
-#	get the content of a playlist and put it in a collection
+"""
+The use case of this script is the following:
+	Get the content of a playlist and put it in a collection
+Requirements (python3 -m pip install [requirement]):
+	requests
+Setup:
+	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
+"""
 
 plex_ip = ''
 plex_port = ''
 plex_api_token = ''
 
-import requests
-import getopt
-import sys
-import re
-
-if not re.search('^(\d{1,3}\.){3}\d{1,3}$', plex_ip):
-	print("Error: " + plex_ip + " is not a valid ip")
-	exit(1)
-
-if not re.search('^\d{1,5}$', plex_port):
-	print("Error: " + plex_port + " is not a valid port")
-	exit(1)
-
-if not re.search('^[\w\d_-~]{19,21}$', plex_api_token):
-	print("Error: " + plex_api_token + " is not a valid api token")
-	exit(1)
+import requests, argparse
 
 ssn = requests.Session()
 ssn.headers.update({"accept": "application/json"})
 ssn.params.update({"X-Plex-Token": plex_api_token})
-baseurl = 'http://' + plex_ip + ':' + plex_port
+baseurl = f'http://{plex_ip}:{plex_port}'
 
-section_output = ssn.get(baseurl + '/library/sections').json()
-playlists_output = ssn.get(baseurl + '/playlists').json()
-arguments, values = getopt.getopt(sys.argv[1:], 'l:p:r', ['TargetLibraryName=', 'PlaylistName=', 'RemovePlaylist'])
-lib_id = ''
-playlist_id = ''
-remove_playlist = False
-for argument, value in arguments:
-	if argument in ('-l', '--LibraryName'):
-		for level in section_output['MediaContainer']['Directory']:
-			if level['title'] == value: lib_id = level['key']
-		if not lib_id:
-			print('Library not found')
-			exit(1)
-	if argument in ('-p', '--PlaylistName'):
-		for level in playlists_output['MediaContainer']['Metadata']:
-			if level['title'] == value:
-				playlist_id = level['ratingKey']
-				playlist_name = value
-		if not playlist_id:
-			print('Playlist not found')
-			exit(1)
-	if argument in ('-r', '--RemovePlaylist'):
-		remove_playlist = True
+parser = argparse.ArgumentParser(description="Get the content of a playlist and put it in a collection")
+parser.add_argument('-l','--LibraryName', help="Name of library to put collection in", required=True)
+parser.add_argument('-p','--PlaylistName', help="Name of playlist to get the content from", required=True)
+parser.add_argument('-r','--RemovePlaylist', help="Remove playlist after creating collection", action='store_true')
+args = parser.parse_args()
 
-if not lib_id or not playlist_id:
-	print('Error: Arguments were not all given')
-	print('Required: -l/--LibraryName [name of library to put collection in], -p/--PlaylistName [name of the playlist to copy/move]')
-	print('Optional: -r/--RemovePlaylist\n		After copying the contents of the playlist to the collection, you can remove the playlist with this flag')
-	exit(1)
+#gather info about library, playlist and server
+machine_id = ssn.get(f'{baseurl}/').json()['MediaContainer']['machineIdentifier']
+section_output = ssn.get(f'{baseurl}/library/sections').json()
+playlists_output = ssn.get(f'{baseurl}/playlists').json()
+for lib in section_output['MediaContainer']['Directory']:
+	if lib['title'] == args.LibraryName:
+		lib_id = lib['key']
+		if lib['type'] == 'movie': lib_type = '1'
+		elif lib['type'] == 'show': lib_type = '4'
+		elif lib['type'] == 'artist': lib_type = '10'
+		elif lib['type'] == 'photo': lib_type = '13'
+		break
+else: parser.error('Library not found')
 
-for entry in ssn.get(baseurl + '/library/sections/' + lib_id + '/collections').json()['MediaContainer']['Metadata']:
-	if entry['title'] == playlist_name:
-		ssn.delete(baseurl + '/library/collections/' + entry['ratingKey'])
+for playlist in playlists_output['MediaContainer']['Metadata']:
+	if playlist['title'] == args.PlaylistName:
+		playlist_id = playlist['ratingKey']
+		break
+else: parser.error('Playlist not found')
 
-entries = []
-for entry in ssn.get(baseurl + '/playlists/' + str(playlist_id) + '/items').json()['MediaContainer']['Metadata']:
-	entries.append(entry['ratingKey'])
+#remove already existing collection with the name
+collections = ssn.get(f'{baseurl}/library/sections/{lib_id}/collections').json()
+if collections['MediaContainer']['size'] > 0:
+	for entry in collections['MediaContainer']['Metadata']:
+		if entry['title'] == args.PlaylistName:
+			ssn.delete(f'{baseurl}/library/collections/{entry["ratingKey"]}')
+			break
 
-machine_id = ssn.get(baseurl + '/').json()['MediaContainer']['machineIdentifier']
-ssn.post(baseurl + '/library/collections', params={'type': '1', 'title': playlist_name, 'smart': '0', 'sectionId': str(lib_id), 'uri': 'server://' + machine_id + '/com.plexapp.plugins.library/library/metadata/' + ','.join(entries)})
-if remove_playlist:
-	ssn.delete(baseurl + '/playlists/' + playlist_id)
+#create list of items that should be added to the collection, sourced from the playlist
+entries = [entry['ratingKey'] for entry in ssn.get(f'{baseurl}/playlists/{playlist_id}/items').json()['MediaContainer']['Metadata']]
+
+#create collection with the list of items
+ssn.post(f'{baseurl}/library/collections', params={'type': lib_type, 'title': args.PlaylistName, 'smart': '0', 'sectionId': str(lib_id), 'uri': 'server://' + machine_id + '/com.plexapp.plugins.library/library/metadata/' + ','.join(entries)})
+if args.RemovePlaylist == True:
+	ssn.delete(f'{baseurl}/playlists/{playlist_id}')
