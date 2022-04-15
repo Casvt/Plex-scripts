@@ -39,6 +39,8 @@ To find the plex api token:
 3. Find the value of `PlexOnlineToken` (e.g. `PlexOnlineToken="abcdefghijklmnopqrst"` -> `abcdefghijklmnopqrst`)
 4. Enter it as the value for `plex_api_token` (as seen above)
 
+**_IMPORTANT: Only fill the variables at the top of the script. Never give values to variables in the middle of the script._**
+
 ## Favourites
 A few of my personal favourites:
 1. [audio_sub_changer.py](https://github.com/Casvt/Plex-scripts/blob/main/changing_settings/audio_sub_changer.py): change audio/subtitle streams based on desired language for an episode, season, series, movie or complete library
