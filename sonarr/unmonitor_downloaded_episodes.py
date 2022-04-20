@@ -7,7 +7,7 @@ The use case of this script is the following:
 SETUP:
 	Go to the sonarr web-ui -> Settings -> Connect -> + -> Custom Script
 		Name = whatever you want
-		Triggers = 'On Import' and 'On Upgrade'
+		Triggers = 'On Download' and 'On Upgrade'
 		Tags = whatever if needed
 		path = /path/to/unmonitor_downloaded_episodes.py
 """
@@ -27,4 +27,4 @@ if environ.get('sonarr_eventtype') == 'Test':
 		exit(1)
 
 sonarr_episodefile_episodeids = str(environ.get('sonarr_episodefile_episodeids'))
-requests.put('http://' + sonarr_ip + ':' + sonarr_port + '/api/v3/episode/monitor?apikey=' + sonarr_api_token, json={'episodeIds':[sonarr_episodefile_episodeids],'monitored':'false'})
+requests.put('http://' + sonarr_ip + ':' + sonarr_port + '/api/v3/episode/monitor?apikey=' + sonarr_api_token, json={'episodeIds':[sonarr_episodefile_episodeids],'monitored': False})
