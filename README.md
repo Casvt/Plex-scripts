@@ -20,11 +20,10 @@ Examples of variables and their expected values:
 plex_ip = '192.168.2.15'
 sonarr_ip = '192.168.2.15'
 radarr_ip = '192.168.2.15'
-#when there is a base url added (e.g. in sonarr or radarr), append it to the ip:
-sonarr_ip = '192.168.2.15/sonarr'
 
 plex_port = '32400'
-sonarr_port = '8989'
+#when there is a base url added (e.g. in sonarr or radarr), append it to the port:
+sonarr_port = '8989/sonarr'
 radarr_port = '7878'
 
 plex_api_token = 'abcdefghijklmnopqrst'
