@@ -1,0 +1,1 @@
+Scripts that work for both Radarr and Sonarr are in the "sonarr" folder
