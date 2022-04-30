@@ -8,10 +8,10 @@ Requirements (python3 -m pip install [requirement]):
 	requests
 Setup:
 	Fill the variables below firstly, then run the script.
+Note:
+	Changing the value of "Original Date" always results in value of 1970-01-01
+	This is a bug that will be fixed in plex server version 1.26.1
 To-Do:
-	"Original Date" always results in value of 1970-01-01
-		Bug on plex's side?
-		Forum post made about this: https://forums.plex.tv/t/setting-a-custom-value-for-originally-available-always-results-in-date-set-to-1970-01-01/790870
 	Collections
 	Music lib
 	Playlists
