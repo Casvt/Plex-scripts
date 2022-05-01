@@ -107,7 +107,9 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, export_watc
 		user_ids = re.findall(r'(?<=userID=")\d+(?=")', shared_users)
 		user_tokens = re.findall(r'(?<=accessToken=")\w+(?=")', shared_users)
 		for user_id, user_token in zip(user_ids, user_tokens):
-			user_watched = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'X-Plex-Token': user_token}).json()['MediaContainer']['Metadata'][0]
+			r = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'X-Plex-Token': user_token})
+			if r.status_code == 404: continue
+			user_watched = r.json()['MediaContainer']['Metadata'][0]
 			if 'viewOffset' in user_watched.keys():
 				result_json[f'_watched_{user_id}'] = user_watched['viewOffset']
 			elif 'viewCount' in user_watched.keys():
