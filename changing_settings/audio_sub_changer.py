@@ -201,7 +201,7 @@ if __name__ == '__main__':
 	parser.add_argument('-s', '--SeriesName', type=str, help="Target a specific series inside a show library based on it's name (only accepted when -l is a show library)")
 	parser.add_argument('-S', '--SeasonNumber', type=int, help="Target a specific season inside the targeted series based on it's number (only accepted when -s is given) (specials is 0)")
 	parser.add_argument('-e', '--EpisodeNumber', type=int, help="Target a specific episode inside the targeted season based on it's number (only accepted when -S is given)")
-	parser.add_argument('-u', '--User', type=str, help="Select the user(s) to apply this script to; Give username, '@me' for yourself or '@all' for everyone", action='append')
+	parser.add_argument('-u', '--User', type=str, help="Select the user(s) to apply this script to; Give username, '@me' for yourself or '@all' for everyone; allowed to give argument multiple times", action='append')
 
 	args = parser.parse_args()
 	#call function and process result
