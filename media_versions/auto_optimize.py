@@ -8,9 +8,7 @@ Requirements (python3 -m pip install [requirement]):
 	requests
 	PlexAPI
 Setup:
-	Fill the variables below firstly, then run the script.
-	Check the help page (python3 auto_optimize.py --help) to see how to use the script with it's arguments.
-	When the script is run with it's arguments, it will show you what media it has processed and will let you know if it has added it to the queue
+	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
 To-Do:
 	1. Don't add media to the optimize-queue when it's already there
 """
@@ -19,83 +17,103 @@ plex_ip = ''
 plex_port = ''
 plex_api_token = ''
 
+from os import getenv
 from plexapi.server import PlexServer
-import requests, argparse
 
-baseurl = f'http://{plex_ip}:{plex_port}'
-plex = PlexServer(baseurl, plex_api_token)
-ssn = requests.Session()
-ssn.headers.update({'Accept': 'application/json'})
-ssn.params.update({'X-Plex-Token': plex_api_token})
+# Environmental Variables
+plex_ip = getenv('plex_ip', plex_ip)
+plex_port = getenv('plex_port', plex_port)
+plex_api_token = getenv('plex_api_token', plex_api_token)
+base_url = f"http://{plex_ip}:{plex_port}"
+plex = PlexServer(base_url, plex_api_token)
 
-def optimize_check(movie):
-	for media in movie['Media']:
+def _optimize_check(media_info, profile):
+	for media in media_info['Media']:
 		for part in media['Part']:
-			if args.Profile in ('Mobile','TV'):
-				if f'/Optimized for {args.Profile}/' in part['file']: return 'Optimized'
-			elif args.Profile == 'Original Quality':
-				if f'/{args.Profile}/' in part['file']: return 'Optimized'
-	return 'Not-Optimized'
+			if profile in ('Mobile','TV'):
+				if f'/Optimized for {profile}/' in part['file']: return True
+			elif profile == 'Original Quality':
+				if f'/{profile}/' in part['file']: return True
+	return False
 
-#process arguments
-parser = argparse.ArgumentParser(description="Automatically optimize media when it isn't already available in that profile")
-parser.add_argument('-L', '--Library', help="Give the name of the library to scan; allowed to give argument multiple times to process multiple libraries", required=True, type=str, action='append')
-parser.add_argument('-P', '--Profile', help="Select the profile", choices=['Mobile','TV','Original Quality'], type=str, required=True)
-parser.add_argument('-l', '--Limit', help="Maximum amount of media that the script is allowed to send to the queue", typ=int)
-args = parser.parse_args()
+def auto_optimize(ssn, profile: str, library_names: list, limit: int=None):
+	counter = 0
 
-#Do not give a value; leave these empty
-lib_ids = []
-lib_types = {}
-counter = 0
-for level in ssn.get(baseurl + '/library/sections').json()['MediaContainer']['Directory']:
-	#go through every library; if it's in the list, note it's type and key
-	if level['title'] in args.Library:
-		lib_ids.append(level['key'])
-		lib_types[level['key']] = level['type']
+	#check for illegal arg parsing
+	if not profile in ('Mobile','TV','Original Quality'):
+		#profile is not set to a valid preset
+		return 'Unknown profile'
 
-for lib in lib_ids:
-	#do this for every library
-	lib_output = ssn.get(baseurl + '/library/sections/' + lib + '/all').json()
-	if lib_types[lib] == 'movie':
-		#lib is a movie lib
-		for movie in lib_output['MediaContainer']['Metadata']:
-			#do this for every movie in the lib
-			if args.Limit != None and counter == args.Limit:
-				print('Limit reached')
-				exit(0)
-			print(movie['title'])
-			if not optimize_check(movie) == 'Optimized':
-				#movie doesn't have an optimized version
-				print(f'	Not optimized for {args.Profile}; optimizing')
-				counter += 1
-				if args.Profile == 'Mobile':
-					plex.fetchItem(movie['ratingKey']).optimize(locationID=-1, targetTagID=1)
-				elif args.Profile == 'TV':
-					plex.fetchItem(movie['ratingKey']).optimize(locationID=-1, targetTagID=2)
-				elif args.Profile == 'Original Quality':
-					plex.fetchItem(movie['ratingKey']).optimize(locationID=-1, targetTagID=3)
+	sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer']['Directory']
+	#loop through the libraries
+	for lib in sections:
+		if not lib['title'] in library_names: continue
 
-	elif lib_types[lib] == 'show':
-		#lib is a show lib
-		for show in lib_output['MediaContainer']['Metadata']:
-			#do this for every show in the lib
-			print(show['title'])
-			for episode in ssn.get(baseurl + '/library/metadata/' + show['ratingKey'] + '/allLeaves').json()['MediaContainer']['Metadata']:
-				#do this for every episode of the show
-				if args.Limit != None and counter == args.Limit:
+		#this library is targeted
+		print(lib['title'])
+		lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all').json()['MediaContainer']['Metadata']
+		if lib['type'] == 'movie':
+			#library is a movie lib; loop through every movie
+			for movie in lib_output:
+				if limit != None and counter == limit:
 					print('Limit reached')
-					exit(0)
-				print('	' + show['title'] + ' - S' + str(episode['parentIndex']) + 'E' + str(episode['index']) + ' - ' + episode['title'])
-				if not optimize_check(episode) == 'Optimized':
-					#episode doesn't have an optimized version
-					print(f'	Not optimized for {args.Profile}; optimizing')
-					counter += 1
-					if args.Profile == 'Mobile':
-						plex.fetchItem(episode['ratingKey']).optimize(locationID=-1, targetTagID=1)
-					elif args.Profile == 'TV':
-						plex.fetchItem(episode['ratingKey']).optimize(locationID=-1, targetTagID=2)
-					elif args.Profile == 'Original Quality':
-						plex.fetchItem(episode['ratingKey']).optimize(locationID=-1, targetTagID=3)
+					return
 
-	else: print('Invalid library; skipping')
+				print(f'	{movie["title"]}')
+				if _optimize_check(movie, profile) == False:
+					#movie doesn't have an optimized version
+					print(f'		Not optimized for {profile}; optimizing')
+					counter += 1
+					if profile == 'Mobile':
+						plex.fetchItem(movie['ratingKey']).optimize(locationID=-1, targetTagID=1)
+					elif profile == 'TV':
+						plex.fetchItem(movie['ratingKey']).optimize(locationID=-1, targetTagID=2)
+					elif profile == 'Original Quality':
+						plex.fetchItem(movie['ratingKey']).optimize(locationID=-1, targetTagID=3)
+
+		elif lib['type'] == 'show':
+			#library is a show lib; loop through every show
+			for show in lib_output:
+				print(f'	{show["title"]}')
+				show_output = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}/allLeaves').json()['MediaContainer']['Metadata']
+				#loop through episodes of show
+				for episode in show_output:
+					if limit != None and counter == limit:
+						print('Limit reached')
+						return
+
+					print(f'		S{episode["parentIndex"]}E{episode["index"]}	- {episode["title"]}')
+					if _optimize_check(episode, profile) == False:
+						#episode doesn't have an optimized version
+						print(f'			Not optimized for {profile}; optimizing')
+						counter += 1
+						if profile == 'Mobile':
+							plex.fetchItem(episode['ratingKey']).optimize(locationID=-1, targetTagID=1)
+						elif profile == 'TV':
+							plex.fetchItem(episode['ratingKey']).optimize(locationID=-1, targetTagID=2)
+						elif profile == 'Original Quality':
+							plex.fetchItem(episode['ratingKey']).optimize(locationID=-1, targetTagID=3)
+		else:
+			return 'Library not supported'
+
+	return
+
+if __name__ == '__main__':
+	import requests, argparse
+
+	#setup vars
+	ssn = requests.Session()
+	ssn.headers.update({'Accept': 'application/json'})
+	ssn.params.update({'X-Plex-Token': plex_api_token})
+
+	#setup arg parsing
+	parser = argparse.ArgumentParser(description="Automatically optimize media when it isn't already available in that profile")
+	parser.add_argument('-l', '--LibraryName', type=str, help="Name of target library; allowed to give argument multiple times", action='append', required=True)
+	parser.add_argument('-P', '--Profile', type=str, choices=['Mobile','TV','Original Quality'], help="The optimization profile", required=True)
+	parser.add_argument('-L', '--Limit', type=int, help="Maximum amount of media that the script is allowed to send to the queue")
+
+	args = parser.parse_args()
+	#call function and process result
+	response = auto_optimize(ssn=ssn, profile=args.Profile, library_names=args.LibraryName, limit=args.Limit)
+	if response != None:
+		parser.error(response)
