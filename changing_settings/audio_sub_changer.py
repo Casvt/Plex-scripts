@@ -131,7 +131,7 @@ else:
 					pre_user_token = str(re.search('(?<=username="' + user + '").*accessToken=".*?(?=")', user_share_output).group(0))
 					user_token = str(re.search('[^"]+$', pre_user_token).group(0))
 					users.append(user_token)
-					users_name[user_token] = str(re.search('^.*?(?=" )', user_data).group(0))
+					users_name[user_token] = user
 
 				except AttributeError:
 					parser.error(f'{user} not found on server')
