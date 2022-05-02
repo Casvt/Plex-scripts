@@ -40,6 +40,15 @@ To find the plex api token:
 
 **_IMPORTANT: Only fill the variables at the top of the script. Never give values to variables in the middle of the script._**
 
+### Dependencies
+Some python scripts have dependencies in order for them to work. You need to install those dependencies before you run the script. The dependencies that a script has can be found at the top of the python script under 'Requirements'.
+
+Install the dependency using the following command (`[requirement]` should be replaced with the name of the dependency):
+```bash
+python3 -m pip install [requirement]
+```
+Do this for every dependency listed in the documentation inside the script.
+
 ## Favourites
 A few of my personal favourites:
 1. [audio_sub_changer.py](https://github.com/Casvt/Plex-scripts/blob/main/changing_settings/audio_sub_changer.py): change audio/subtitle streams based on desired language for an episode, season, series, movie or complete library
