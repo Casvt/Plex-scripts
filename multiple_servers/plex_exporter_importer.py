@@ -77,8 +77,8 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, export_watc
 	#build file paths
 	file_data = f'{root_file}_metadata.json'
 	if download_poster == True:
-		thumb_url = media_info['thumb']
-		art_url = media_info['art']
+		thumb_url = media_info['thumb'] if 'thumb' in media_info else None
+		art_url = media_info['art'] if 'art' in media_info else None
 		file_thumb = f'{root_file}_thumb.jpg'
 		file_art = f'{root_file}_art.jpg'
 
@@ -117,8 +117,10 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, export_watc
 			else:
 				result_json[f'_watched_{user_id}'] = False
 	if download_poster == True:
-		thumb = ssn.get(f'{base_url}{thumb_url}').content
-		art = ssn.get(f'{base_url}{art_url}').content
+		if thumb_url != None:
+			thumb = ssn.get(f'{base_url}{thumb_url}').content
+		if art_url != None:
+			art = ssn.get(f'{base_url}{art_url}').content
 
 	#all data is extracted, put them into files
 
@@ -126,11 +128,13 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, export_watc
 	json.dump(result_json, open(file_data, 'w+'), indent=4)
 	if download_poster == True:
 		#put thumb (poster) into file
-		with open(file_thumb, 'wb') as f_thumb:
-			f_thumb.write(thumb)
+		if thumb_url != None:
+			with open(file_thumb, 'wb') as f_thumb:
+				f_thumb.write(thumb)
 		#put art (background; fan-art) into file
-		with open(file_art, 'wb') as f_art:
-			f_art.write(art)
+		if art_url != None:
+			with open(file_art, 'wb') as f_art:
+				f_art.write(art)
 
 	return result_json
 
