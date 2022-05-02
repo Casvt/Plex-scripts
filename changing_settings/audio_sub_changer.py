@@ -67,7 +67,7 @@ def _set_track(ssn, user_tokens: list, rating_key: str, type: int, language: str
 							break
 	return
 
-def audio_sub_changer(ssn, type: str, language: str, library_name: str, movie_name: str=None, series_name: str=None, season_number: int=None, episode_number: int=None, users: list=[]):
+def audio_sub_changer(ssn, type: str, language: str, library_name: str, movie_name: list=[], series_name: str=None, season_number: int=None, episode_number: int=None, users: list=[]):
 	result_json = []
 
 	#check for illegal arg parsing
@@ -117,17 +117,13 @@ def audio_sub_changer(ssn, type: str, language: str, library_name: str, movie_na
 		if lib['type'] == 'movie':
 			#library is a movie lib; loop through every movie
 			for movie in lib_output:
-				if movie_name != None and movie['title'] != movie_name:
+				if movie_name and not movie['title'] in movie_name:
 					#a specific movie is targeted and this one is not it, so skip
 					continue
 				
 				print(f'	{movie["title"]}')
 				_set_track(ssn=ssn, user_tokens=user_tokens, rating_key=movie['ratingKey'], type=type, language=language)
 				result_json.append(movie['ratingKey'])
-
-				if movie_name != None:
-					#the targeted movie was found and processed so exit loop
-					break
 		
 		elif lib['type'] == 'show':
 			#library is show lib; loop through every show
@@ -197,11 +193,11 @@ if __name__ == '__main__':
 	parser.add_argument('-t', '--Type', choices=['audio','subtitle'], help="Give the type of stream to change", required=True)
 	parser.add_argument('-L', '--Language', type=str, help="ISO-639-1 (2 lowercase letters) language code (e.g. 'en') to try to set the stream to", required=True)
 	parser.add_argument('-l', '--LibraryName', type=str, help="Name of target library", required=True)
-	parser.add_argument('-m', '--MovieName', type=str, help="Target a specific movie inside a movie library based on it's name (only accepted when -l is a movie library); allowed to give argument multiple times", action='append')
+	parser.add_argument('-m', '--MovieName', type=str, help="Target a specific movie inside a movie library based on it's name (only accepted when -l is a movie library); allowed to give argument multiple times", action='append', default=[])
 	parser.add_argument('-s', '--SeriesName', type=str, help="Target a specific series inside a show library based on it's name (only accepted when -l is a show library)")
 	parser.add_argument('-S', '--SeasonNumber', type=int, help="Target a specific season inside the targeted series based on it's number (only accepted when -s is given) (specials is 0)")
 	parser.add_argument('-e', '--EpisodeNumber', type=int, help="Target a specific episode inside the targeted season based on it's number (only accepted when -S is given)")
-	parser.add_argument('-u', '--User', type=str, help="Select the user(s) to apply this script to; Give username, '@me' for yourself or '@all' for everyone; allowed to give argument multiple times", action='append')
+	parser.add_argument('-u', '--User', type=str, help="Select the user(s) to apply this script to; Give username, '@me' for yourself or '@all' for everyone; allowed to give argument multiple times", action='append', default=[])
 
 	args = parser.parse_args()
 	#call function and process result
