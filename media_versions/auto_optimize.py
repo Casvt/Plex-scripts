@@ -23,7 +23,7 @@ from plexapi.server import PlexServer
 import requests, argparse
 
 baseurl = f'http://{plex_ip}:{plex_port}'
-plex = Plex.Server(baseurl, plex_api_token)
+plex = PlexServer(baseurl, plex_api_token)
 ssn = requests.Session()
 ssn.headers.update({'Accept': 'application/json'})
 ssn.params.update({'X-Plex-Token': plex_api_token})
