@@ -302,6 +302,10 @@ def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, expo
 				if isinstance(result, str): return result
 				if result: result_json.append(result)
 
+				if movie_name != None:
+					#the targeted movie was found and processed so exit loop
+					break
+
 		elif lib['type'] == 'show':
 			#library is show lib; loop through every show
 			for show in lib_output:
