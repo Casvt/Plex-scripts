@@ -120,11 +120,11 @@ def audio_sub_changer(ssn, type: str, language: str, library_name: str, movie_na
 				if movie_name and not movie['title'] in movie_name:
 					#a specific movie is targeted and this one is not it, so skip
 					continue
-				
+
 				print(f'	{movie["title"]}')
 				_set_track(ssn=ssn, user_tokens=user_tokens, rating_key=movie['ratingKey'], type=type, language=language)
 				result_json.append(movie['ratingKey'])
-		
+
 		elif lib['type'] == 'show':
 			#library is show lib; loop through every show
 			for show in lib_output:
