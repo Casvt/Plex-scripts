@@ -4,8 +4,9 @@
 """
 The use case of this script is the following:
 	When an episode is downloaded and imported in sonarr, unmonitor that episode
-SETUP:
-	Go to the sonarr web-ui -> Settings -> Connect -> + -> Custom Script
+Setup:
+	Fill the variables below firstly,
+	then go to the sonarr web-ui -> Settings -> Connect -> + -> Custom Script:
 		Name = whatever you want
 		Triggers = 'On Download' and 'On Upgrade'
 		Tags = whatever if needed
@@ -16,15 +17,32 @@ sonarr_ip = ''
 sonarr_port = ''
 sonarr_api_token = ''
 
-import requests
-from os import environ
+from os import getenv
 
-if environ.get('sonarr_eventtype') == 'Test':
+# Environmental Variables
+sonarr_ip = getenv('sonarr_ip', sonarr_ip)
+sonarr_port = getenv('sonarr_port', sonarr_port)
+sonarr_api_token = getenv('sonarr_api_token', sonarr_api_token)
+
+def unmonitor_downloaded_episodes(ssn, episode_id: str):
+	result = ssn.put(f'http://{sonarr_ip}:{sonarr_port}/api/v3/episode/monitor', json={'episodeIds':[episode_id],'monitored': False})
+	return result
+
+#handle testing of the script by sonarr
+if getenv('sonarr_eventtype') == 'Test':
 	if sonarr_ip and sonarr_port and sonarr_api_token:
 		exit(0)
 	else:
 		print('Error: Not all variables are set')
 		exit(1)
 
-sonarr_episodefile_episodeids = str(environ.get('sonarr_episodefile_episodeids'))
-requests.put('http://' + sonarr_ip + ':' + sonarr_port + '/api/v3/episode/monitor?apikey=' + sonarr_api_token, json={'episodeIds':[sonarr_episodefile_episodeids],'monitored': False})
+if __name__ == '__main__':
+	import requests
+
+	#setup vars
+	ssn = requests.Session()
+	ssn.params.update({'apikey': sonarr_api_token})
+	episode_id = str(getenv('sonarr_episodefile_episodeids'))
+
+	#call function
+	unmonitor_downloaded_episodes(ssn, episode_id)
