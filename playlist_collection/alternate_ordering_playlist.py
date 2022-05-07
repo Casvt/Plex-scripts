@@ -93,9 +93,16 @@ def alternate_ordering_playlist(ssn, series_name: str, get_orders: bool=False, o
 				if add_unknown == True and '_none' in id_map:
 					result_json += id_map['_none']
 
+				#if playlist with this name already exists, remove it first
+				playlists = ssn.get(f'{base_url}/playlists').json()['MediaContainer']
+				if 'Metadata' in playlists:
+					for playlist in playlists['Metadata']:
+						if playlist['title'] == f'{show["title"]} - {order}':
+							ssn.delete(f'{base_url}/playlists/{playlist["ratingKey"]}')
+
 				#create playlist
 				machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
-				ssn.post(f'{base_url}/playlists', params={'type': 'video', 'title': f"{show['title']} - {order}", 'smart': '0', 'uri': f'server://{machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(result_json)}'})
+				ssn.post(f'{base_url}/playlists', params={'type': 'video', 'title': f'{show["title"]} - {order}', 'smart': '0', 'uri': f'server://{machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(result_json)}'})
 
 				break
 		else:
