@@ -18,12 +18,12 @@ plex_ip = ''
 plex_port = ''
 plex_api_token = ''
 
-import os
+from os import getenv
 
 # Environmental Variables
-plex_ip = os.getenv('plex_ip', plex_ip)
-plex_port = os.getenv('plex_port', plex_port)
-plex_api_token = os.getenv('plex_api_token', plex_api_token)
+plex_ip = getenv('plex_ip', plex_ip)
+plex_port = getenv('plex_port', plex_port)
+plex_api_token = getenv('plex_api_token', plex_api_token)
 base_url = f"http://{plex_ip}:{plex_port}"
 
 def advanced_playlist(ssn, series_names: list, order: str, playlist_name: str):
