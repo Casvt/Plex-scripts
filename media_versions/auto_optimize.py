@@ -37,6 +37,7 @@ def _optimize_check(media_info, profile):
 	return False
 
 def auto_optimize(ssn, profile: str, library_names: list, limit: int=None):
+	result_json = []
 	counter = 0
 
 	#check for illegal arg parsing
@@ -57,7 +58,7 @@ def auto_optimize(ssn, profile: str, library_names: list, limit: int=None):
 			for movie in lib_output:
 				if limit != None and counter == limit:
 					print('Limit reached')
-					return
+					return result_json
 
 				print(f'	{movie["title"]}')
 				if _optimize_check(movie, profile) == False:
@@ -70,6 +71,7 @@ def auto_optimize(ssn, profile: str, library_names: list, limit: int=None):
 						plex.fetchItem(movie['ratingKey']).optimize(locationID=-1, targetTagID=2)
 					elif profile == 'Original Quality':
 						plex.fetchItem(movie['ratingKey']).optimize(locationID=-1, targetTagID=3)
+					result_json.append(movie['ratingKey'])
 
 		elif lib['type'] == 'show':
 			#library is a show lib; loop through every show
@@ -93,10 +95,11 @@ def auto_optimize(ssn, profile: str, library_names: list, limit: int=None):
 							plex.fetchItem(episode['ratingKey']).optimize(locationID=-1, targetTagID=2)
 						elif profile == 'Original Quality':
 							plex.fetchItem(episode['ratingKey']).optimize(locationID=-1, targetTagID=3)
+						result_json.append(episode['ratingKey'])
 		else:
 			return 'Library not supported'
 
-	return
+	return result_json
 
 if __name__ == '__main__':
 	import requests, argparse
@@ -115,5 +118,5 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 	#call function and process result
 	response = auto_optimize(ssn=ssn, profile=args.Profile, library_names=args.LibraryName, limit=args.Limit)
-	if response != None:
+	if not isinstance(response, list):
 		parser.error(response)
