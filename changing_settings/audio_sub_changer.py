@@ -125,6 +125,10 @@ def audio_sub_changer(ssn, type: str, language: str, library_name: str, movie_na
 				_set_track(ssn=ssn, user_tokens=user_tokens, rating_key=movie['ratingKey'], type=type, language=language)
 				result_json.append(movie['ratingKey'])
 
+				if movie_name != None:
+					#the targeted movie was found and processed so exit loop
+					break
+
 		elif lib['type'] == 'show':
 			#library is show lib; loop through every show
 			for show in lib_output:
