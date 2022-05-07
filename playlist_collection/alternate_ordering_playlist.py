@@ -23,7 +23,7 @@ plex_port = getenv('plex_port', plex_port)
 plex_api_token = getenv('plex_api_token', plex_api_token)
 base_url = f"http://{plex_ip}:{plex_port}"
 
-def alternate_ordering_playlist(ssn, series_name: str, get_orders: bool=False, order: str=None, add_unknown: bool=False):
+def alternate_ordering_playlist(ssn, series_name: str, get_orders: bool=False, order: str=None, add_unknown: bool=False, no_watched: bool=False):
 	result_json = []
 
 	#check for illegal arg parsing
@@ -75,6 +75,8 @@ def alternate_ordering_playlist(ssn, series_name: str, get_orders: bool=False, o
 				id_map = {}
 				show_content = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}/allLeaves', params={'includeGuids': '1'}).json()['MediaContainer']['Metadata']
 				for episode in show_content:
+					if no_watched == True and 'watchCount' in episode:
+						continue
 					if not 'Guid' in episode: episode['Guid'] = []
 					for id in episode['Guid']:
 						if id['id'].startswith('tvdb://'):
@@ -127,10 +129,11 @@ if __name__ == '__main__':
 	parser.add_argument('-g', '--GetOrders', help="Get the tvdb orders available for the series", action='store_true')
 	parser.add_argument('-o', '--Order', type=str, help="Name of tvdb order that should be applied")
 	parser.add_argument('-u', '--AddUnknown', help="Add all episodes of the show that weren't found in the tvdb to the end of the playlist", action='store_true')
+	parser.add_argument('-w', '--NoWatched', help="Don't add episodes that are marked as watched", action='store_true')
 
 	args = parser.parse_args()
 	#call function and process result
-	response = alternate_ordering_playlist(ssn=ssn, series_name=args.SeriesName, get_orders=args.GetOrders, order=args.Order, add_unknown=args.AddUnknown)
+	response = alternate_ordering_playlist(ssn=ssn, series_name=args.SeriesName, get_orders=args.GetOrders, order=args.Order, add_unknown=args.AddUnknown, no_watched=args.NoWatched)
 	if isinstance(response, list):
 		if args.GetOrders == True:
 			#the orders of the series was requested so print them out
