@@ -10,9 +10,9 @@ Setup:
 	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
 """
 
-plex_ip = ''
-plex_port = ''
-plex_api_token = ''
+plex_ip = '192.168.2.15'
+plex_port = '32400'
+plex_api_token = 'QU4cw1mLdJjBjGMudSbF'
 
 from os import getenv
 import re
@@ -75,7 +75,7 @@ def alternate_ordering_playlist(ssn, series_name: str, get_orders: bool=False, o
 				id_map = {}
 				show_content = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}/allLeaves', params={'includeGuids': '1'}).json()['MediaContainer']['Metadata']
 				for episode in show_content:
-					if no_watched == True and 'watchCount' in episode:
+					if no_watched == True and 'viewCount' in episode:
 						continue
 					if not 'Guid' in episode: episode['Guid'] = []
 					for id in episode['Guid']:
