@@ -95,7 +95,7 @@ def alternate_ordering_playlist(ssn, series_name: str, get_orders: bool=False, o
 
 				#create playlist
 				machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
-				ssn.post(f'{base_url}/playlists', params={'type': 'video', 'title': show['title'], 'smart': '0', 'uri': f'server://{machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(result_json)}', 'description.value': order})
+				ssn.post(f'{base_url}/playlists', params={'type': 'video', 'title': f"{show['title']} - {order}", 'smart': '0', 'uri': f'server://{machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(result_json)}'})
 
 				break
 		else:
