@@ -2,7 +2,7 @@
 
 This repository is a collection of scripts that I made targeted at applications like Plex, the arr's and Tautulli. It is inspired by the JBOPS repo. The scripts were made after requests, made by other people, in [this](https://www.reddit.com/r/PleX/comments/pbwf41/ill_make_any_script_suggestions_you_give/) reddit post. The target of most scripts is to expand the functionality of the applications. These scripts often fulfill a request for a feature made by many users of the applications a long time ago.
 
-Info about the use case of every script can be found at the top inside the file. Info about how to setup the scripts can be found in the [wiki](https://github.com/Casvt/Plex-scripts/wiki/Setup). Eventhough it all started with making requests using comments under a reddit post, now we make requests using GitHub issues for which you can find info [here](https://github.com/Casvt/Plex-scripts/wiki/Requesting)
+Info about the use case of every script can be found at the top inside the file. Info about how to setup the scripts can be found in the [wiki](https://github.com/Casvt/Plex-scripts/wiki/Setup). Eventhough it all started with making requests using comments under a reddit post, now we make requests using [GitHub issues](https://github.com/Casvt/Plex-scripts/issues) for which you can find info [here](https://github.com/Casvt/Plex-scripts/wiki/Requesting).
 
 ## Favourites
 A few of my personal favourites:
