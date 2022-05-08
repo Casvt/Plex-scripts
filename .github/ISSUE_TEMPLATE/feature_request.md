@@ -7,4 +7,6 @@ assignees: ''
 
 ---
 
+In what file should the feature be added?
 
+What is the feature request?
