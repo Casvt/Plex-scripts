@@ -1,53 +1,8 @@
 # Plex-scripts
 
-This repository is a collection of scripts that I made targeted at applications like Plex, the arr's and Tautulli. It is inspired by the JBOPS repo. The scripts were made after requests, made by other people, in [this](https://www.reddit.com/r/PleX/comments/pbwf41/ill_make_any_script_suggestions_you_give/) reddit post. The target of most scripts is to expand the functionality of the applications. The scripts often fulfill requests for a feature made by many users of the applications a long time ago.
+This repository is a collection of scripts that I made targeted at applications like Plex, the arr's and Tautulli. It is inspired by the JBOPS repo. The scripts were made after requests, made by other people, in [this](https://www.reddit.com/r/PleX/comments/pbwf41/ill_make_any_script_suggestions_you_give/) reddit post. The target of most scripts is to expand the functionality of the applications. These scripts often fulfill a request for a feature made by many users of the applications a long time ago.
 
-Info about the use case of every script can be found at the top inside the file.
-
-## Setup
-1. First of all, download the script onto your computer.
-2. Inside the file, fill the required variables. More info about this can be found below.
-3. Some scripts just need to be run manually, but others need to be setup in sonarr/radarr/tautulli or need to be run at an interval (like 5 min or 12 hours). Instructions on how to run the script can be found inside the file.
-
-### Variables
-Inside the scripts, there are variables that you need to fill in order for the script to work. These variables are named after the value that they should have. They all follow the same logic: `[software]_[requested value]`. So if the variable is called `sonarr_port`, the value should be the port that sonarr is running on (default is 8989). It will look like this: 
-```python
-sonarr_port = '8989'
-```
-
-Examples of variables and their expected values:
-```python
-plex_ip = '192.168.2.15'
-sonarr_ip = '192.168.2.15'
-radarr_ip = '192.168.2.15'
-
-plex_port = '32400'
-#when there is a base url added (e.g. in sonarr or radarr), append it to the port:
-sonarr_port = '8989/sonarr'
-radarr_port = '7878'
-
-plex_api_token = 'abcdefghijklmnopqrst'
-sonarr_api_token = 'abcdefghijklmnopqrstuvwxyz'
-radarr_api_token = 'abcdefghijklmnopqrstuvwxyz'
-```
-The api token of sonarr or radarr can be found in the web-ui under Settings -> General -> Security -> API Key
-
-To find the plex api token:
-1. Find where the data directory of plex is located for your OS [here](https://support.plex.tv/articles/202915258-where-is-the-plex-media-server-data-directory-located/)
-2. Open the file `Preferences.xml` inside the data directory found in step 1
-3. Find the value of `PlexOnlineToken` (e.g. `PlexOnlineToken="abcdefghijklmnopqrst"` -> `abcdefghijklmnopqrst`)
-4. Enter it as the value for `plex_api_token` (as seen above)
-
-**_IMPORTANT: Only fill the variables at the top of the script. Never give values to variables in the middle of the script._**
-
-### Dependencies
-Some python scripts have dependencies in order for them to work. You need to install those dependencies before you run the script. The dependencies that a script has can be found at the top of the python script under 'Requirements'.
-
-Install the dependency using the following command (`[requirement]` should be replaced with the name of the dependency):
-```bash
-python3 -m pip install [requirement]
-```
-Do this for every dependency listed in the documentation inside the script.
+Info about the use case of every script can be found at the top inside the file. Info about how to setup the scripts can be found in the [wiki](https://github.com/Casvt/Plex-scripts/wiki/Setup). Eventhough it all started with making requests using comments under a reddit post, now we make requests using GitHub issues for which you can find info [here](https://github.com/Casvt/Plex-scripts/wiki/Requesting)
 
 ## Favourites
 A few of my personal favourites:
@@ -58,18 +13,9 @@ A few of my personal favourites:
 5. [advanced_playlists.py](https://github.com/Casvt/Plex-scripts/blob/main/playlist_collection/advanced_playlists.py): create playlists containing (multiple) series in custom orders like shuffled, semi-shuffled (series sequential but episodes shuffled) and staggered.
 
 ## Great scripts, but why?
-I've noticed that plex, the arr's and tautulli all are great applications but they have their flaws. Often, people say "Plex is great, but..." or "Sonarr is cool but I hate that...". Now ofcourse software can't be perfect for everyone as everyone want's to do something different, but the amount of but's that these applications have is a little too much. I have quite a bit of experience, working with these applications and thus I thought "why not help out?" I know their api's well, what is possible and not, etc. So I started the reddit thread found above where people could tell their but's and I would fix them in the form of a script. This repository is the result of that post (and a few scripts made after my own but's). I just want everyone to enjoy these great applications to their fullest. It's also great practise for me as I'm learning new languages and this ofcourse helps me getting comfortable in them.
+I've noticed that plex, the arr's and tautulli all are great applications but they have their flaws. Often, people say "Plex is great, but..." or "Sonarr is cool but I hate that...". Now ofcourse software can't be perfect for everyone as everyone want's to do something different, but the amount of but's that these applications have is a little too much.
 
-## Other repo's
-I'm not the only one with a repository for scripts regarding these softwares. Check these out too:
-- [JBOPS (Just a bunch of plex scripts)](https://github.com/blacktwin/JBOPS)
-- [Tautulli scripts](https://github.com/Tautulli/Tautulli/wiki/Custom-Scripts#list-of-user-created-scripts)
-
-## Feature requests
-Before making a feature request, check here if someone hasn't made a better version of one of my scripts:
-- intro_skipper.py -> [mdhiggins's version](https://github.com/mdhiggins/PlexAutoSkip)
-
-Otherwise, make a feature request in the [discord server](https://discord.gg/AbCQ9tduZA) or make a github issue and just tell me what you would like to see being added. Or if you already did it yourself, feel free to make a pull request.
+I have quite a bit of experience, working with these applications and thus I thought "why not help out?" I know their api's well, what is possible and not, etc. So I started the reddit thread found above where people could tell their but's and I would fix them in the form of a script. This repository is the result of that post (and a few scripts made after my own but's). I just want everyone to enjoy these great applications to their fullest. It's also great practise for me as I'm learning new languages and this ofcourse helps me getting comfortable in them.
 
 ## BASH
 There are a few scripts in the repository that are written in BASH. I'm slowly converting all those scripts to python scripts.
