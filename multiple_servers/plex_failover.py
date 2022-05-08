@@ -120,6 +120,7 @@ def plex_failover(main_plex_ssn, backup_plex_ssn, session_id: str, buffer_thresh
 		for session in sessions['Metadata']:
 			if session['Session']['id'] == session_id:
 				#session found
+				if session['Session']['location'] != 'lan': return 'Session not local; ignoring'
 				session_state = session['Player']['state']
 				if session_state == 'buffering':
 					#session is buffering; check if it's still in {buffer_threshold} seconds
