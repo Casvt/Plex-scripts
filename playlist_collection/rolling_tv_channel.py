@@ -85,7 +85,6 @@ for playlist in playlists:
 			r = ssn.get(f'{base_url}/library/metadata/{series_id}', params={'includeOnDeck': '1'})
 			if r.status_code != 404:
 				r = r.json()['MediaContainer']['Metadata'][0]
-				print(r)
 				if 'OnDeck' in r.keys():
 					series_mapping['None'] = r['OnDeck']['Metadata']['ratingKey']
 
