@@ -1,57 +1,66 @@
 #!/usr/bin/python3
-#The use case of this script is the following:
-#	Remove entries in a playlist when they've met or surpassed the given viewcount
+#-*- coding: utf-8 -*-
+
+"""
+The use case of this script is the following:
+	Remove entries in a playlist when they've met or surpassed the given viewcount
+Requirements (python3 -m pip install [requirement]):
+	requests
+Setup:
+	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
+	Run this script at an interval. Decide for yourself what the interval is (e.g. every 20m or every 12h)
+"""
 
 plex_ip = ''
 plex_port = ''
 plex_api_token = ''
 
-import sys
-import getopt
-import requests
-import json
-import re
+from os import getenv
 
-if not re.search('^(\d{1,3}\.){3}\d{1,3}$', plex_ip):
-	print("Error: " + plex_ip + " is not a valid ip")
-	exit(1)
+# Environmental Variables
+plex_ip = getenv('plex_ip', plex_ip)
+plex_port = getenv('plex_port', plex_port)
+plex_api_token = getenv('plex_api_token', plex_api_token)
+base_url = f"http://{plex_ip}:{plex_port}"
 
-if not re.search('^\d{1,5}$', plex_port):
-	print("Error: " + plex_port + " is not a valid port")
-	exit(1)
+def view_count_playlist(ssn, playlist_name: str, view_count: int):
+	result_json = []
 
-if not re.search('^[\w\d_-~]{19,21}$', plex_api_token):
-	print("Error: " + plex_api_token + " is not a valid api token")
-	exit(1)
+	playlists = ssn.get(f'{base_url}/playlists').json()['MediaContainer']
+	if not 'Metadata' in playlists: return 'Playlist not found'
+	#loop through every playlist
+	for playlist in playlists['Metadata']:
+		if playlist['title'] == playlist_name:
+			#playlist found
+			playlist_entries = ssn.get(f'{base_url}/playlists/{playlist["ratingKey"]}/items').json()['MediaContainer']
+			if not 'Metadata' in playlist_entries: return result_json
+			#loop through every entry in the playlist
+			for entry in playlist_entries['Metadata']:
+				if 'viewCount' in entry and int(entry['viewCount']) >= view_count:
+					#entry surpassed view count so remove it
+					result_json.append(entry['ratingKey'])
+					ssn.delete(f'{base_url}/playlists/{playlist["ratingKey"]}/items/{entry["playlistItemID"]}')
+			break
+	else:
+		return 'Playlist not found'
 
-ssn = requests.Session()
-ssn.headers.update({'Accept': 'application/json'})
-ssn.params.update({'X-Plex-Token': plex_api_token})
-baseurl = 'http://' + plex_ip + ':' + plex_port
+	return result_json
 
-arguments, values = getopt.getopt(sys.argv[1:], 'p:c:', ['PlaylistName=', 'ViewCount='])
-playlist_id = ''
-viewcount = ''
-for argument, value in arguments:
-	if argument in ('-p', '--PlaylistName'):
-		for level in json.loads(ssn.get(baseurl + '/playlists').text)['MediaContainer']['Metadata']:
-			if level['title'] == value: playlist_id = level['ratingKey']
-		if not playlist_id:
-			print('Playlist not found')
-			exit(1)
-	if argument in ('-c', '--ViewCount'):
-		if re.search('^\d+', value): viewcount = value
-		else:
-			print(value + 'is not a valid view count')
-			exit(1)
+if __name__ == '__main__':
+	import requests, argparse
 
-if not playlist_id or not viewcount:
-	print('Error: Arguments were not all given')
-	print('Required: -p/--PlaylistName [name of target playlist], -c/--ViewCount [viewcount to remove entries after]')
-	exit(1)
+	#setup vars
+	ssn = requests.Session()
+	ssn.headers.update({'Accept': 'application/json'})
+	ssn.params.update({'X-Plex-Token': plex_api_token})
 
-for entry in json.loads(ssn.get(baseurl + '/playlists/' + str(playlist_id) + '/items').text)['MediaContainer']['Metadata']:
-	#do this for every entry in the playlist
-	if int(entry['viewCount']) >= int(viewcount):
-		#the entry's viewcount has surpassed the allowed count; remove it
-		ssn.delete(baseurl + '/playlists/' + str(playlist_id) + '/items/' + str(entry['playlistItemID']))
+	#setup arg parsing
+	parser = argparse.ArgumentParser(description='Remove entries in a playlist when they\'ve met or surpassed the given viewcount')
+	parser.add_argument('-p','--PlaylistName', type=str, help='Name of target playlist', required=True)
+	parser.add_argument('-c','--ViewCount', type=int, help='The viewcount that is the minimum to be removed', required=True)
+
+	args = parser.parse_args()
+	#call function and process result
+	response = view_count_playlist(ssn=ssn, playlist_name=args.PlaylistName, view_count=args.ViewCount)
+	if not isinstance(response, list):
+		parser.error(response)
