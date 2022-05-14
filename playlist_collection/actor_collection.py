@@ -3,84 +3,82 @@
 
 """
 The use case of this script is the following:
-	Have a collection containing all the movies of the x first actors (and optionally of the movie director) of the last viewed movie
+	Create a collection containing all the movies of the x first actors (and optionally of the movie director) of the last viewed movie
 	The collection will be put in the library from where the source movie originated
 Requirements (python3 -m pip install [requirement]):
-	PlexAPI
-	websocket-client
 	requests
 Setup:
-	Fill the variables below firstly, then run the script.
-	Once this script is run, it will keep running and will handle the updating of the collection once needed.
-	Run it in the background as a service or as a cronjob.
+	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
+	Run this script at an interval. Decide for yourself what the interval is (e.g. every 5m)
 """
 
 plex_ip = ''
 plex_port = ''
 plex_api_token = ''
-collection_name = 'Actor Collection'
 
-import requests, argparse, time
-from plexapi.server import PlexServer
-#required for alert listener so checking here
-import websocket
+from os import getenv
 
-parser = argparse.ArgumentParser(description='Have a collection containing all the movies of the x first actors (and optionally of the movie director) of the last viewed movie. The collection will be put in the library from where the source movie originated.')
-parser.add_argument(
-	'-A',
-	'--Actors',
-	help="How many of the movie actors should be looked at to take the movies from to include them in the collection",
-	type=int,
-	required=True
-)
-parser.add_argument(
-	'-D',
-	'--MovieDirector',
-	help="Also include all the movies of the director in the collection",
-	action="store_true"
-)
-args = parser.parse_args()
+# Environmental Variables
+plex_ip = getenv('plex_ip', plex_ip)
+plex_port = getenv('plex_port', plex_port)
+plex_api_token = getenv('plex_api_token', plex_api_token)
+base_url = f"http://{plex_ip}:{plex_port}"
 
-baseurl = 'http://' + plex_ip + ':' + str(plex_port)
-plex = PlexServer(baseurl, plex_api_token)
-ssn = requests.Session()
-ssn.headers.update({'Accept': 'application/json'})
-ssn.params.update({'X-Plex-Token': plex_api_token})
+def actor_collection(ssn, collection_name: str='Actor Collection', actors: int=5, movie_director: bool=False):
+	result_json = []
 
-def process(data):
-	if data['PlaySessionStateNotification'][0]['state'] == 'stopped':
-		media_output = ssn.get(baseurl + '/library/metadata/' + str(data['PlaySessionStateNotification'][0]['ratingKey'])).json()
-		if media_output['MediaContainer']['Metadata'][0]['type'] == 'movie':
-			lib_id = str(media_output['MediaContainer']['Metadata'][0]['librarySectionID'])
-			actors = []
-			actor_movies = []
-			for actor in media_output['MediaContainer']['Metadata'][0]['Role']:
-				if len(actors) == args.Actors:
-					break
-				actors.append(actor['id'])
-			for actor in actors:
-				for actor_movie in ssn.get(baseurl + '/library/sections/' + lib_id + '/all', params={'type': '1', 'actor': actor}).json()['MediaContainer']['Metadata']:
-					if not actor_movie['ratingKey'] in actor_movies:
-						actor_movies.append(actor_movie['ratingKey'])
-			if args.MovieDirector:
-				for director_movie in ssn.get(baseurl + '/library/sections/' + lib_id + '/all', params={'type': '1', 'director': media_output['MediaContainer']['Metadata'][0]['Director'][0]['id']}).json()['MediaContainer']['Metadata']:
-					if not director_movie['ratingKey'] in actor_movies:
-						actor_movies.append(director_movie['ratingKey'])
-			col_id = ''
-			for collection in ssn.get(baseurl + '/library/sections/' + lib_id + '/collections').json()['MediaContainer']['Metadata']:
+	#search in history for last viewed movie
+	history = ssn.get(f'{base_url}/status/sessions/history/all').json()['MediaContainer']
+	if not 'Metadata' in history: return result_json
+	for media in history['Metadata'][::-1]:
+		if media['type'] == 'movie':
+			#found last viewed movie
+			media_info = ssn.get(f'{base_url}/library/metadata/{media["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
+			if not 'Role' in media_info: continue
+
+			#get the ids of the actors to get the movies of
+			actor_ids = [a['id'] for a in media_info['Role'][0:actors]]
+			#note the movies down that the actors played in
+			movie_ratingkeys = []
+			for actor in actor_ids:
+				actor_movies = ssn.get(f'{base_url}/library/sections/{media["librarySectionID"]}/all', params={'type': '1', 'actor': actor}).json()['MediaContainer']['Metadata']
+				movie_ratingkeys += [m['ratingKey'] for m in actor_movies if not m['ratingKey'] in movie_ratingkeys]
+
+			if movie_director == True:
+				#get the movies of the movie director too
+				director_movies = ssn.get(f'{base_url}/library/sections/{media["librarySectionID"]}/all', params={'type': '1',  'director': media_info['Director'][0]['id']}).json()['MediaContainer']['Metadata']
+				movie_ratingkeys += [m['ratingKey'] for m in director_movies if not m['ratingKey'] in movie_ratingkeys]
+			
+			#if collection with this name already exists, remove it first
+			collections = ssn.get(f'{base_url}/library/sections/{media["librarySectionID"]}/collections').json()['MediaContainer']['Metadata']
+			for collection in collections:
 				if collection['title'] == collection_name:
-					col_id = collection['ratingKey']
-			machine_id = ssn.get(baseurl + '/').json()['MediaContainer']['machineIdentifier']
-			if col_id:
-				ssn.delete(baseurl + '/library/collections/' + col_id)
-			ssn.post(baseurl + '/library/collections', params={'type': '1', 'title': collection_name, 'smart': '0', 'sectionId': str(media_output['MediaContainer']['Metadata'][0]['librarySectionID']), 'uri': 'server://' + machine_id + '/com.plexapp.plugins.library/library/metadata/' + ','.join(actor_movies)})
-			print('Collection updated')
+					ssn.delete(f'{base_url}/library/collections/{collection["ratingKey"]}')
+			
+			#create collection
+			machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
+			ssn.post(f'{base_url}/library/collections', params={'type': '1', 'title': collection_name, 'smart': '0', 'sectionId': media['librarySectionID'], 'uri': f'server://{machine_id}/com.plexapp.library/library/metadata/{",".join(movie_ratingkeys)}'})
+			result_json = movie_ratingkeys
+			break
+
+	return result_json
 
 if __name__  == '__main__':
-	print('Keeping the collection updated...')
-	try:
-		listener = plex.startAlertListener(callback=process)
-		while True:
-			time.sleep(1)
-	except KeyboardInterrupt:
-		listener.stop()
+	import requests, argparse
+
+	#setup vars
+	ssn = requests.Session()
+	ssn.headers.update({'Accept': 'application/json'})
+	ssn.params.update({'X-Plex-Token': plex_api_token})
+
+	#setup arg parsing
+	parser = argparse.ArgumentParser(description='Create a collection containing all the movies of the x first actors (and optionally of the movie director) of the last viewed movie')
+	parser.add_argument('-c','--CollectionName', type=str, help='Name of target collection', default='Actor Collection')
+	parser.add_argument('-a','--Actors', type=int, help="How many of the movie actors should be looked at to take the movies from to include them in the collection", default=5)
+	parser.add_argument('-d','--MovieDirector', help="Also include all the movies of the director in the collection", action="store_true")
+
+	args = parser.parse_args()
+	#call function and process result
+	response = actor_collection(ssn=ssn, collection_name=args.CollectionName, actors=args.Actors, movie_director=args.MovieDirector)
+	if not isinstance(response, list):
+		parser.error(response)
