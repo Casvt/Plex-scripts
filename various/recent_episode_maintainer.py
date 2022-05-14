@@ -1,154 +1,190 @@
 #!/usr/bin/python3
-#The use case of this script is the following:
-#	If the media has not been watched for x days, falls outside of the x newest episodes, has been watched for x or more times or has been added x or more days ago,
-#	act on the media by, for example, deleting the file and removing it from your library
+#-*- coding: utf-8 -*-
+
+"""
+The use case of this script is the following:
+	If targeted media falls under certain conditions, delete the file
+Requirements (python3 -m pip install [requirement]):
+	requests
+Setup:
+	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
+Warning:
+	This script deletes media files if they match the rules set by you! I'm not responsible for any loss of data.
+"""
 
 plex_ip = ''
 plex_port = ''
 plex_api_token = ''
 
-import re
+from os import getenv
+from time import time
 
-if not re.search('^(\d{1,3}\.){3}\d{1,3}$', plex_ip):
-	print("Error: " + plex_ip + " is not a valid ip")
-	exit(1)
-
-if not re.search('^\d{1,5}$', plex_port):
-	print("Error: " + plex_port + " is not a valid port")
-	exit(1)
-
-if not re.search('^[\w\d_-~]{19,21}$', plex_api_token):
-	print("Error: " + plex_api_token + " is not a valid api token")
-	exit(1)
-
-import requests
-import json
-import getopt
-import sys
-import time
-
-#This function will be run for every episode that falls under the conditions (e.g. to be removed).
-#You can change this function to do anything you want with the episode.
-#The dict 'episode_object' contains information about the episode that you can use.
-def action(episode_object):
-#don't comment out the True unless you add an action below
-	True
-#show content of episode_object
-#	print(episode_object)
-#remove the media (a.k.a. removing the file(s))
-#	ssn.delete(baseurl + '/library/metadata/' + episode_object['ratingKey'])
-
-def episode(episode_object):
-	if 	(days_old and 'lastViewedAt' in episode_object.keys() and int(episode_object['lastViewedAt']) < int(time.time()) - (days_old * 86400)) or \
-		(days_added and int(episode_object['addedAt']) < int(time.time()) - (days_added * 86400)) or \
-		(view_count and 'viewCount' in episode_object.keys() and int(episode_object['viewCount']) >= view_count): #86400 = 1 day in epoch/seconds
-		print(episode_object['grandparentTitle'] + ' - S' + str(episode_object['parentIndex']) + 'E' + str(episode_object['index']) + ' - ' + episode_object['title'])
-		action(episode_object)
-		return
-	if recent_episodes:
-		if not episode_object['grandparentRatingKey'] in latest_episodes.keys():
-			latest_episodes[episode_object['grandparentRatingKey']] = []
-			for episode in json.loads(ssn.get(baseurl + '/library/metadata/' + episode_object['grandparentRatingKey'] + '/allLeaves').text)['MediaContainer']['Metadata'][recent_episodes:]:
-				latest_episodes[episode_object['grandparentRatingKey']].append(episode['ratingKey'])
-		if not episode_object['ratingKey'] in latest_episodes[episode_object['grandparentRatingKey']]:
-			print(episode_object['grandparentTitle'] + ' - S' + str(episode_object['parentIndex']) + 'E' + str(episode_object['index']) + ' - ' + episode_object['title'])
-			action(episode_object)
-			return
-
-ssn = requests.Session()
-ssn.headers.update({'Accept': 'application/json'})
-ssn.params.update({'X-Plex-Token': plex_api_token})
-baseurl = 'http://' + plex_ip + ':' + plex_port
-
-section_output = json.loads(ssn.get(baseurl + '/library/sections').text)
-arguments, values = getopt.getopt(sys.argv[1:], 'hD:R:V:A:L:S:s:e:', ['Help', 'DaysOld=', 'RecentEpisodes=', 'ViewCount=', 'DaysAdded=', 'LibraryName=', 'Series=', 'SeasonNumber=', 'EpisodeNumber='])
-days_old = ''
-recent_episodes = ''
-view_count = ''
-days_added = ''
-lib_id = ''
-series_id = ''
-season_id = ''
-episode_id = ''
+# Environmental Variables
+plex_ip = getenv('plex_ip', plex_ip)
+plex_port = getenv('plex_port', plex_port)
+plex_api_token = getenv('plex_api_token', plex_api_token)
+base_url = f"http://{plex_ip}:{plex_port}"
 latest_episodes = {}
-for argument, value in arguments:
-	if argument in ('-h', '--Help'):
-		print('The arguments to use this script:\nIMPORTANT: The arguments need to be given in the order that they are shown here!')
-		print('Required (the \'AND/OR\' arguments are evaluated as \'or\' (so the media will be removed if it matches -D OR -R OR -V OR -A)):\n	-D/--DaysOld [how many days ago the media was watched for the last time]\n	AND/OR\n	-R/--RecentEpisodes [the number of recent episodes to keep (e.g. only keep the newest x episodes)]\n	AND/OR\n	-V/--ViewCount [remove if media has x or more views]\n	AND/OR\n	-A/--DaysAdded [remove if media has been added x or more days ago]\n\n	-L/--LibraryName [name of target library]')
-		print('Optional:\n	-S/--Series [target series name]\n	-s/--SeasonNumber [number of the target season]\n	-e/--EpisodeNumber [number of the target episode]')
-		print('When --Series is given, the whole series is processed; when --SeasonNumber is given, the whole season of the series is processed; when --EpisodeNumber is given, that specific episode of that specific season is processed')
-		exit()
-	if argument in ('-D', '--DaysOld'):
-		if re.search('^\d+$', value): days_old = int(value)
+
+def _process_media(ssn, rating_key: str, days_old: int=None, days_added: int=None, recent_episodes: int=None, view_count: int=None):
+	media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}').json()['MediaContainer']['Metadata'][0]
+	if days_old and 'lastViewedAt' in media_info and media_info['lastViewedAt'] < time() - (days_old * 86400):
+#		ssn.delete(f'{base_url}/library/metadata/{rating_key}')
+		return f'Removed: Last time watched was more than {days_old} days ago'
+	if days_added and media_info['addedAt'] < time() - (days_added * 86400):
+		ssn.delete(f'{base_url}/library/metadata/{rating_key}')
+		return f'Removed: Added more than {days_added} days ago'
+	if view_count and 'viewCount' in media_info and media_info['viewCount'] >= view_count:
+		ssn.delete(f'{base_url}/library/metadata/{rating_key}')
+		return f'Removed: Watched {view_count} or more times'
+	if recent_episodes:
+		if media_info['type'] != 'episode':
+			return f'Invalid media type for recent_episodes: {media_info["type"]}'
+		#get the x latest episodes of the series and cache it
+		if not media_info['grandparentRatingKey'] in latest_episodes:
+			show_episodes = ssn.get(f'{base_url}/library/metadata/{media_info["grandparentRatingKey"]}/allLeaves').json()['MediaContainer']['Metadata'][recent_episodes * -1:]
+			latest_episodes[media_info['grandparentRatingKey']] = [e['ratingKey'] for e in show_episodes]
+		#check if media is in this list
+		if not media_info['ratingKey'] in latest_episodes[media_info['grandparentRatingKey']]:
+			ssn.delete(f'{base_url}/library/metadata/{rating_key}')
+			return f'Removed: Not one of the {view_count} latest episodes of the series'
+	return
+
+def recent_episode_maintainer(ssn, library_name: str, movie_name: list=[], series_name: str=None, season_number: int=None, episode_number: int=None, days_old: int=None, days_added: int=None, recent_episodes: int=None, view_count: int=None):
+	result_json = []
+
+	#check for illegal arg parsing
+	if season_number != None and series_name == None:
+		#season number given but no series name
+		return '"season_number" is set but not "series_name"'
+	if episode_number != None and (season_number == None or series_name == None):
+		#episode number given but no season number or no series name
+		return '"episode_number" is set but not "season_number" or "series_name"'
+	if days_old == None and days_added == None and recent_episodes == None and view_count == None:
+		#no rules given
+		return 'No rules given'
+
+	kwargs = {
+		'days_old': days_old,
+		'days_added': days_added,
+		'recent_episodes': recent_episodes,
+		'view_count': view_count
+	}
+	sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer']['Directory']
+	#loop through the libraries
+	for lib in sections:
+		if lib['title'] != library_name: continue
+
+		#this library is targeted
+		print(lib['title'])
+		lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all').json()['MediaContainer']['Metadata']
+		if lib['type'] == 'movie':
+			#library is a movie lib; loop through every movie
+			for movie in lib_output:
+				if movie_name and not movie['title'] in movie_name:
+					#a specific movie is targeted and this one is not it, so skip
+					continue
+
+				print(f'	{movie["title"]}')
+				result = _process_media(ssn=ssn, rating_key=movie['ratingKey'], **kwargs)
+				if isinstance(result, str) and result.startswith('Removed: '):
+					print(f'		{result}')
+					result_json.append(movie['ratingKey'])
+				elif isinstance(result, str):
+					return result
+
+				if movie_name:
+					#the targeted movie was found and processed so exit loop
+					break
+
+		elif lib['type'] == 'show':
+			#library is show lib; loop through every show
+			for show in lib_output:
+				if series_name != None and show['title'] != series_name:
+					#a specific show is targeted and this one is not it, so skip
+					continue
+
+				print(f'	{show["title"]}')
+				show_output = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}/allLeaves').json()['MediaContainer']['Metadata']
+				#loop through episodes of show to check if targeted season exists
+				if season_number != None:
+					for episode in show_output:
+						if episode['parentIndex'] == season_number:
+							break
+					else:
+						return 'Season not found'
+				#loop through episodes of show
+				for episode in show_output:
+					if season_number != None and episode['parentIndex'] != season_number:
+						#a specific season is targeted and this one is not it; so skip
+						continue
+
+					if episode_number != None and episode['index'] != episode_number:
+						#this season is targeted but this episode is not; so skip
+						continue
+
+					print(f'		S{episode["parentIndex"]}E{episode["index"]}	- {episode["title"]}')
+					result = _process_media(ssn=ssn, rating_key=episode['ratingKey'], **kwargs)
+					if isinstance(result, str) and result.startswith('Removed: '):
+						print(f'			{result}')
+						result_json.append(episode['ratingKey'])
+					elif isinstance(result, str):
+						return result
+
+					if episode_number != None:
+						#the targeted episode was found and processed so exit loop
+						break
+				else:
+					if episode_number != None:
+						#the targeted episode was not found
+						return 'Episode not found'
+
+				if series_name != None:
+					#the targeted series was found and processed so exit loop
+					break
+			else:
+				if series_name != None:
+					#the targeted series was not found
+					return 'Series not found'
 		else:
-			print('Error: days-old given is not a number')
-			exit(1)
+			return 'Library not supported'
+		#the targeted library was found and processed so exit loop
+		break
+	else:
+		#the targeted library was not found
+		return 'Library not found'
 
-	if argument in ('-R', '--RecentEpisodes'):
-		if re.search('^\d+$', value): recent_episodes = int(value) * -1
+	return result_json
+
+if __name__ == '__main__':
+	import requests, argparse
+
+	#setup vars
+	ssn = requests.Session()
+	ssn.headers.update({'Accept': 'application/json'})
+	ssn.params.update({'X-Plex-Token': plex_api_token})
+
+	#setup arg parsing
+	parser = argparse.ArgumentParser(description="If targeted media falls under certain conditions, delete the file", epilog="All rules are evaluated as 'or'. So it's [rule 1] or [rule 2] or [rule 3] etc.")
+	parser.add_argument('-l', '--LibraryName', type=str, help="Name of target library", required=True)
+	parser.add_argument('-m', '--MovieName', type=str, help="Target a specific movie inside a movie library based on it's name (only accepted when -l is a movie library); allowed to give argument multiple times", action='append', default=[])
+	parser.add_argument('-s', '--SeriesName', type=str, help="Target a specific series inside a show library based on it's name (only accepted when -l is a show library)")
+	parser.add_argument('-S', '--SeasonNumber', type=int, help="Target a specific season inside the targeted series based on it's number (only accepted when -s is given) (specials is 0)")
+	parser.add_argument('-e', '--EpisodeNumber', type=int, help="Target a specific episode inside the targeted season based on it's number (only accepted when -S is given)")
+	parser.add_argument('-d', '--DaysOld', type=int, help="Remove media watched later than x days ago for the last time")
+	parser.add_argument('-a', '--DaysAdded', type=int, help="Remove media added later than x days ago")
+	parser.add_argument('-r', '--RecentEpisodes', type=int, help="Only keep the latest x episodes of a series")
+	parser.add_argument('-c', '--ViewCount', type=int, help="Only keep media that has been watched x or less times")
+
+	args = parser.parse_args()
+	#call function and process result
+	response = recent_episode_maintainer(ssn=ssn, library_name=args.LibraryName, movie_name=args.MovieName, series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber, days_old=args.DaysOld, days_added=args.DaysAdded, recent_episodes=args.RecentEpisodes, view_count=args.ViewCount)
+	if not isinstance(response, list):
+		if response == '"season_number" is set but not "series_name"':
+			parser.error('-S/--SeasonNumber given but not -s/--SeriesName given')
+
+		elif response == '"episode_number" is set but not "season_number" or "series_name"':
+			parser.error('-e/--EpisodeNumber given but -S/--SeasonNumber or -s/--SeriesName not given')
+
 		else:
-			print('Error: recent-episodes given is not a number')
-			exit(1)
-
-	if argument in ('-V', '--ViewCount'):
-		if re.search('^\d+$', value): view_count = int(value)
-		else:
-			print('Error: view-count given is not a number')
-			exit(1)
-
-	if argument in ('-A', '--DaysAdded'):
-		if re.search('^\d+$', value): days_added = int(value)
-		else:
-			print('Error: days-added given is not a number')
-			exit(1)
-
-	if argument in ('-L', '--LibraryName'):
-		for level in section_output['MediaContainer']['Directory']:
-			if level['title'] == str(value) and level['type'] == 'show': lib_id = level['key']
-		if not lib_id:
-			print('Error: library not found or not a show library')
-			exit(1)
-
-	if argument in ('-S', '--Series'):
-		for level in json.loads(ssn.get(baseurl + '/library/sections/' + lib_id + '/all').text)['MediaContainer']['Metadata']:
-			if level['title'] == str(value): series_id = level['ratingKey']
-		if not series_id:
-			print('Error: series not found or arguments not given in correct order')
-			exit(1)
-
-	if argument in ('-s', '--SeasonNumber'):
-		for level in json.loads(ssn.get(baseurl + '/library/metadata/' + series_id + '/children').text)['MediaContainer']['Metadata']:
-			if level['index'] == int(value): season_id = level['ratingKey']
-		if not season_id:
-			print('Error: season not found or arguments not given in correct order')
-			exit(1)
-
-	if argument in ('-e', '--EpisodeNumber'):
-		for level in json.loads(ssn.get(baseurl + '/library/metadata/' + season_id + '/children').text)['MediaContainer']['Metadata']:
-			if level['index'] == int(value): episode_id = level
-		if not episode_id:
-			print('Error: episode not found or arguments not given in correct order')
-			exit(1)
-
-if not lib_id or not (days_old or recent_episodes or view_count or days_added):
-	print('Error: Required arguments were not all given\nrun recent_episode_maintainer.py -h')
-	exit(1)
-
-if episode_id:
-	#change an episode
-	episode(episode_id)
-elif season_id:
-	#change a season
-	for episodes in json.loads(ssn.get(baseurl + '/library/metadata/' + season_id + '/children').text)['MediaContainer']['Metadata']:
-		episode(episodes)
-elif series_id:
-	#change a series
-	for season in json.loads(ssn.get(baseurl + '/library/metadata/' + series_id + '/children').text)['MediaContainer']['Metadata']:
-		for episodes in json.loads(ssn.get(baseurl + '/library/metadata/' + season['ratingKey'] + '/children').text)['MediaContainer']['Metadata']:
-			episode(episodes)
-elif lib_id:
-	#change a library
-	for series in json.loads(ssn.get(baseurl + '/library/sections/' + lib_id + '/all').text)['MediaContainer']['Metadata']:
-		for season in json.loads(ssn.get(baseurl + '/library/metadata/' + series['ratingKey'] + '/children').text)['MediaContainer']['Metadata']:
-			for episodes in json.loads(ssn.get(baseurl + '/library/metadata/' + season['ratingKey'] + '/children').text)['MediaContainer']['Metadata']:
-				episode(episodes)
+			parser.error(response)
