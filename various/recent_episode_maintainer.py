@@ -29,7 +29,7 @@ latest_episodes = {}
 def _process_media(ssn, rating_key: str, days_old: int=None, days_added: int=None, recent_episodes: int=None, view_count: int=None):
 	media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}').json()['MediaContainer']['Metadata'][0]
 	if days_old and 'lastViewedAt' in media_info and media_info['lastViewedAt'] < time() - (days_old * 86400):
-#		ssn.delete(f'{base_url}/library/metadata/{rating_key}')
+		ssn.delete(f'{base_url}/library/metadata/{rating_key}')
 		return f'Removed: Last time watched was more than {days_old} days ago'
 	if days_added and media_info['addedAt'] < time() - (days_added * 86400):
 		ssn.delete(f'{base_url}/library/metadata/{rating_key}')
