@@ -305,7 +305,7 @@ def video(session, part_id, media_output=None):
 		#better stream found so change it
 		client = plex.client(session['Player']['title'])
 		view_offset = session['viewOffset']
-		if set_stream_soirce == '':
+		if set_stream_source == '':
 			logging.info('No better video version was found')
 		elif set_stream_source == 'version':
 			logging.info(f'A better video stream has been found inside a different version of the file with the resolution of {set_stream_count}')
