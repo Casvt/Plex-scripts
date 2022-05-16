@@ -16,7 +16,7 @@ plex_port = ''
 plex_api_token = ''
 
 from os import getenv
-from os.path import isfile, splitext
+from os.path import isfile, splitext, basename
 
 # Environmental Variables
 plex_ip = getenv('plex_ip', plex_ip)
@@ -32,7 +32,7 @@ def filename_to_collection(ssn, file_path: str):
 		return 'File not found'
 
 	#get filename and extract collections
-	file_name = splitext(file_path)[0]
+	file_name = splitext(basename(file_path))[0]
 	collections = file_name.split('.')
 
 	#find library that file is in
