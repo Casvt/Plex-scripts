@@ -116,7 +116,7 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, download_ep
 				result_json[f'_watched_{user_id}'] = True
 			else:
 				result_json[f'_watched_{user_id}'] = False
-	if download_poster == True:
+	if download_poster == True and (download_episode_posters == True or (download_episode_posters == False and media_info['type'] != 'episode')):
 		if thumb_url != None:
 			thumb = ssn.get(f'{base_url}{thumb_url}').content
 		if art_url != None:
