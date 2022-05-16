@@ -64,10 +64,6 @@ def poster_downloader(ssn, library_name: str, movie_name: list=[], series_name: 
 				result = _download_poster(ssn=ssn, media_info=movie)
 				if result: result_json.append(result)
 
-				if movie_name:
-					#the targeted movie was found and processed so exit loop
-					break
-
 		elif lib['type'] == 'show':
 			#library is show lib; loop through every show
 			for show in lib_output:

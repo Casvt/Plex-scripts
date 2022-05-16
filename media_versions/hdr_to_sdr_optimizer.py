@@ -77,10 +77,6 @@ def hdr_to_sdr_optimizer(ssn, plex, library_name: str, movie_name: list=[], seri
 					print('		Optimizing')
 				result_json.append(movie['ratingKey'])
 
-				if movie_name:
-					#the targeted movie was found and processed so exit loop
-					break
-
 		elif lib['type'] == 'show':
 			#library is show lib; loop through every HDR episode
 			lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'episode.hdr': '1', 'type': '4'}).json()['MediaContainer']

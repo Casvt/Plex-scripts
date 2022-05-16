@@ -56,10 +56,6 @@ def media_profile_lister(ssn, profile: str, library_name: str, movie_name: list=
 				print(f'	{movie["title"]}')
 				result_json.append(movie['ratingKey'])
 
-				if movie_name:
-					#the targeted movie was found and processed so exit loop
-					break
-
 		elif lib['type'] == 'show':
 			#library is show lib; loop through every show
 			for show in lib_output:
