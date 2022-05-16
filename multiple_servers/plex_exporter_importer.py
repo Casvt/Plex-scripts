@@ -29,7 +29,7 @@ plex_port = os.getenv('plex_port', plex_port)
 plex_api_token = os.getenv('plex_api_token', plex_api_token)
 base_url = f"http://{plex_ip}:{plex_port}"
 
-def _export_media(type: str, data: dict, ssn, download_poster: bool, export_watched: bool):
+def _export_media(type: str, data: dict, ssn, download_poster: bool, download_episode_posters: bool, export_watched: bool):
 	result_json = {}
 	#extract different data based on the type
 	keys = []
@@ -76,7 +76,7 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, export_watc
 
 	#build file paths
 	file_data = f'{root_file}_metadata.json'
-	if download_poster == True:
+	if download_poster == True and (download_episode_posters == True or (download_episode_posters == False and media_info['type'] != 'episode')):
 		thumb_url = media_info['thumb'] if 'thumb' in media_info else None
 		art_url = media_info['art'] if 'art' in media_info else None
 		file_thumb = f'{root_file}_thumb.jpg'
@@ -249,7 +249,7 @@ def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched:
 
 	return result_json
 
-def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, export_watched: bool, lib_id: str=None, movie_name: str=None, series_name: str=None, season_number: int=None, episode_number: int=None):
+def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, export_episode_posters: bool, export_watched: bool, lib_id: str=None, movie_name: str=None, series_name: str=None, season_number: int=None, episode_number: int=None):
 	#returning non-list is for errors
 
 	result_json = []
@@ -277,6 +277,7 @@ def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, expo
 	args = {'ssn': ssn}
 	if type == 'export':
 		args['download_poster'] = export_posters
+		arga['download_episode_posters'] = export_episode_posters
 		args['export_watched'] = export_watched
 	else:
 		args['import_watched'] = export_watched
@@ -403,6 +404,7 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description='Export Plex metadata to a file that then can be imported later')
 	parser.add_argument('-t','--Type', choices=['import','export'], required=True, type=str, help='Either export metadata or import it into plex')
 	parser.add_argument('-p','--NoPosters', action='store_true', help='EXPORT ONLY: Disable exporting media posters and backgrounds')
+	parser.add_argument('-P','--NoEpisodePosters', action='store_true', help='EXPORT ONLY: Disable exporting the posters of episodes')
 	parser.add_argument('-w','--NoWatched', action='store_true', help='Disable exporting/importing watched status for every user')
 
 	#args regarding target selection
@@ -415,20 +417,20 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	#get general info about targets, check for illegal arg parsing and call functions
-	if args.NoPosters == True and args.Type == 'import':
+	if (args.NoPosters == True or args.NoEpisodePosters == True) and args.Type == 'import':
 		#--NoPosters was given but the type is 'import' (--NoPosters is only for 'export')
 		parser.error('-p/--NoPosters was given but -t/--Type was set to \'import\'')
 
 	if args.All == True:
 		#user selected --All
-		plex_exporter_importer(type=args.Type, ssn=ssn, all=True, export_posters=False if args.NoPosters == True else True, export_watched=False if args.NoWatched == True else True)
+		plex_exporter_importer(type=args.Type, ssn=ssn, all=True, export_posters=False if args.NoPosters == True else True, export_episode_posters=False if args.NoEpisodePosters == True else True, export_watched=False if args.NoWatched == True else True)
 	else:
 		#user is more specific
 		sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer']['Directory']
 		for lib in sections:
 			if lib['title'] == args.LibraryName:
 				#library found
-				response = plex_exporter_importer(type=args.Type, ssn=ssn, all=False, lib_id=lib['key'], movie_name=args.MovieName, series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber, export_posters=False if args.NoPosters == True else True, export_watched=False if args.NoWatched == True else True)
+				response = plex_exporter_importer(type=args.Type, ssn=ssn, all=False, lib_id=lib['key'], movie_name=args.MovieName, series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber, export_posters=False if args.NoPosters == True else True, export_episode_posters=False if args.NoEpisodePosters == True else True, export_watched=False if args.NoWatched == True else True)
 				if not isinstance(response, list):
 					if response == 'Library ID not given (lib_id)':
 						parser.error('Neither -a/--All or -l/--LibraryName given')
