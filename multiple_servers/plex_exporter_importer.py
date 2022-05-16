@@ -277,7 +277,7 @@ def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, expo
 	args = {'ssn': ssn}
 	if type == 'export':
 		args['download_poster'] = export_posters
-		arga['download_episode_posters'] = export_episode_posters
+		args['download_episode_posters'] = export_episode_posters
 		args['export_watched'] = export_watched
 	else:
 		args['import_watched'] = export_watched
