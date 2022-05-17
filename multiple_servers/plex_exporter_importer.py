@@ -126,7 +126,7 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, download_ep
 
 	#put data into file
 	json.dump(result_json, open(file_data, 'w+'), indent=4)
-	if download_poster == True:
+	if download_poster == True and (download_episode_posters == True or (download_episode_posters == False and media_info['type'] != 'episode')):
 		#put thumb (poster) into file
 		if thumb_url != None:
 			with open(file_thumb, 'wb') as f_thumb:
