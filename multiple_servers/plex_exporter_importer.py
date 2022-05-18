@@ -15,6 +15,7 @@ To-Do:
 	Collections
 	Music lib
 	Playlists
+	Match using guids instead of ratingkey (aka support for cross server)
 """
 
 plex_ip = ''
@@ -72,7 +73,9 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, download_ep
 		return 'Unknown source type when trying to extract data (internal error)'
 
 	rating_key = data['ratingKey']
-	media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}').json()['MediaContainer']['Metadata'][0]
+	media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}')
+	if media_info.status_code != 200: return result_json
+	media_info = media_info.json()['MediaContainer']['Metadata'][0]
 
 	#build file paths
 	file_data = f'{root_file}_metadata.json'
@@ -108,7 +111,7 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, download_ep
 		user_tokens = re.findall(r'(?<=accessToken=")\w+(?=")', shared_users)
 		for user_id, user_token in zip(user_ids, user_tokens):
 			r = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'X-Plex-Token': user_token})
-			if r.status_code == 404: continue
+			if r.status_code != 200: continue
 			user_watched = r.json()['MediaContainer']['Metadata'][0]
 			if 'viewOffset' in user_watched.keys():
 				result_json[f'_watched_{user_id}'] = user_watched['viewOffset']
@@ -163,7 +166,9 @@ def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched:
 		return 'Unknown source type when trying to import data (internal error)'
 
 	rating_key = data['ratingKey']
-	media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}').json()['MediaContainer']['Metadata'][0]
+	media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}')
+	if media_info.status_code != 200: return result_json
+	media_info = media_info.json()['MediaContainer']['Metadata'][0]
 	if import_watched == True:
 		machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
 		shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers', headers={}).text
@@ -293,7 +298,9 @@ def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, expo
 		print(lib['title'])
 		if type == 'import':
 			args['media_lib_id'] = lib['key']
-		lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all').json()['MediaContainer']['Metadata']
+		lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all')
+		if lib_output.status_code != 200: continue
+		lib_output = lib_output.json()['MediaContainer']['Metadata']
 		if lib['type'] == 'movie':
 			#library is movie lib; loop through every movie
 			for movie in lib_output:
@@ -319,7 +326,9 @@ def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, expo
 					continue
 
 				print(f'	{show["title"]}')
-				show_output = ssn.get(f'{base_url}{show["key"]}').json()
+				show_output = ssn.get(f'{base_url}{show["key"]}')
+				if show_output != 200: continue
+				show_output = show_output.json()
 				show_info = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
 				#export/import show data
 				result = method(type='show', data=show_info, **args)
