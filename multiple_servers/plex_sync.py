@@ -2,44 +2,23 @@
 # -*- coding: utf-8 -*-
 
 """
-Keep data between two servers synced.
-Multiple things can be synced at the same time with multiuser support
-
-Keep in mind that only media is effected by the script if it has the same name on the source AND target (e.g. 'Back to the Future 2' on both servers will work but 'Back to the Future II' + 'Back to the Future 2' not)
-If you want to run this script automatically, do it every 3-7 days, as it is an intensive script for the network and servers
-First set the variables below, remember the name and then run the script with --Help
-For example:
-	main_plex_name = 'Batman server'
-	...
-	backup_plex_name = 'Robin server'
-	...
-Arguments that can be used:
-	-h/--Help:
-		Show info about how to use the script; can also look here
-	-S/--SourceName [name of server that's used as the source]
-		REQUIRED: Select the server that serves as the source
-	-T/--TargetName [name of server that's used as the target]
-		REQUIRED: Select the server that will be synced to
-	-s/--Sync [Collections|Posters|Watch History|Playlists]
-		Select what to sync; this argument can be given multiple times to sync multiple things
-		General:
-			Collections: sync the collections made and the media that's inside of it
-			Posters: sync the posters for media; handy for when custom posters are set
-		User specific:
-			Watch History: sync the watch status of media (e.g. watched/not watched/partially watched (in that case offset is copied))
-			Playlists: sync all playlists the user(s) has/have made; title, summary and content are synced
-	-u/--User [username]
-		When given, apply user specific sync actions to these users; this argument can be given multiple times to apply to multiple users
-		Use '@me' to apply the sync actions to yourself too
-		Use '@all' to apply the sync actions to every user
-EXAMPLES:
-	python3 plex_sync.py -S 'Batman server' -T 'Robin server' --Sync 'Watch History' --User @all
+The use case of this script is the following:
+	Keep data between two plex servers synced. Multiple things can be synced at the same time with multiuser support
+Requirements (python3 -m pip install [requirement]):
+	requests
+	aiohttp
+Setup:
+	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
+	Run this script at an interval. Decide for yourself what the interval is (e.g. every day or every week)
+Example:
+	Examples are assuming that main server name is 'Batman server' and backup server name is 'Robin server'
+	python3 plex_sync.py -s 'Batman server' --Sync watch_history --User @all
 		Sync watch history of every user from 'Batman server' to 'Robin server'
-	python3 plex_sync.py -S 'Robin server' -T 'Batman server' --Sync Posters
+	python3 plex_sync.py -s 'Robin server' --Sync posters
 		Taking 'Robin server' as the source and 'Batman server' as the sync target
 		Sync the posters of the media (movies, shows and seasons)(posters of playlists and collections are synced with the Playlists and Collections action respectively)
-		No need to specify users as every sync action (in this case Posters) is a general sync action and not a user specific action
-	python3 plex_sync.py --SourceName 'Batman server' --TargetName 'Robin server' --User @me --User 'user2' --Sync Collections --Sync Playlists --Sync 'Watch History'
+		No need to specify users as this sync action is a general sync action and not a user specific action
+	python3 plex_sync.py --SourceName 'Batman server' --User @me --User 'user2' --Sync collections --Sync playlists --Sync watch_history
 		Taking 'Batman server' as the source and 'Robin server' as the sync target
 		Apply the user specific sync actions (in this case playlists and watch history) to yourself and 'user2'
 		Sync the collections, playlists and watch history
@@ -55,454 +34,456 @@ backup_plex_ip = ''
 backup_plex_port = ''
 backup_plex_api_token = ''
 
-import requests
-import re
-import sys
-import getopt
-import threading
+from os import getenv
+from aiohttp import ClientSession
+from asyncio import gather, run
+from time import perf_counter
 
-class sync():
-	def __init__(self, source, target, pre=False, admin=False):
-		#convert 'main' and 'backup' to 'source' and 'target'
-		if source == 'main':
-			self.source_ip = main_plex_ip
-			self.source_port = main_plex_port
+# Environmental Variables
+main_plex_ip = getenv('main_plex_ip', main_plex_ip)
+main_plex_port = getenv('main_plex_port', main_plex_port)
+main_plex_api_token = getenv('main_plex_api_token', main_plex_api_token)
+main_plex_name = getenv('main_plex_name', main_plex_name)
+main_base_url = f"http://{main_plex_ip}:{main_plex_port}"
+backup_plex_ip = getenv('backup_plex_ip', backup_plex_ip)
+backup_plex_port = getenv('backup_plex_port', backup_plex_port)
+backup_plex_api_token = getenv('backup_plex_api_token', backup_plex_api_token)
+backup_base_url = f"http://{backup_plex_ip}:{backup_plex_port}"
+backup_plex_name = getenv('backup_plex_name', backup_plex_name)
+
+class plex_sync:
+	def __init__(self, main_ssn, backup_ssn, source: str, sync: list, users: list=['@me'], sync_episode_posters: bool=True):
+		#check for illegal argument parsing
+		if any(s not in ('collections','posters','watch_history','playlists') for s in sync):
+			return 'Invalid value in "sync" list'
+		if not source in (main_plex_name, backup_plex_name):
+			return 'Invalid value for "source"'
+
+		#setup vars
+		self.result_json, self.user_tokens, self.map = [], [], {}
+		self.cache = {
+			'source': {},
+			'target': {}
+		}
+		self.sync = sync
+		self.users = users
+		self.sync_episode_posters = sync_episode_posters
+		if source == main_plex_name:
+			self.source_ssn = main_ssn
+			self.target_ssn = backup_ssn
+			self.source_base_url = main_base_url
+			self.target_base_url = backup_base_url
 			self.source_api_token = main_plex_api_token
-		elif source == 'backup':
-			self.source_ip = backup_plex_ip
-			self.source_port = backup_plex_port
-			self.source_api_token = backup_plex_api_token
-		if target == 'main':
-			self.target_ip = main_plex_ip
-			self.target_port = main_plex_port
-			self.target_api_token = main_plex_api_token
-		elif target == 'backup':
-			self.target_ip = backup_plex_ip
-			self.target_port = backup_plex_port
 			self.target_api_token = backup_plex_api_token
+		elif source == backup_plex_name:
+			self.source_ssn = backup_ssn
+			self.target_ssn = main_ssn
+			self.source_base_url = backup_base_url
+			self.target_base_url = main_base_url
+			self.source_api_token = backup_plex_api_token
+			self.target_api_token = main_plex_api_token
+		self.source_machine_id = self.__get_data('source','/')['MediaContainer']['machineIdentifier']
+		self.target_machine_id = self.__get_data('target','/')['MediaContainer']['machineIdentifier']
 
-		#set username so that it's visible to the user what the script is doing for who
-		if pre == False:
-			if admin == True:
-				self.username = 'Admin'
-			else:
-				self.username = username_list[source_user_token_list[1:].index(self.source_api_token) + 1]
-		#check connection and immediately set machine_id of servers too
-		try:
-			self.source_machine_id = requests.get('http://' + self.source_ip + ':' + self.source_port + '/', params={'X-Plex-Token': self.source_api_token}, headers={'accept': 'application/json'}).json()['MediaContainer']['machineIdentifier']
-			if not self.source_machine_id:
-				raise ConnectionError('can\'t connect to source plex server')
-		except Exception:
-			raise ConnectionError('can\'t connect to source plex server')
-		try:
-			self.target_machine_id = requests.get('http://' + self.target_ip + ':' + self.target_port + '/', params={'X-Plex-Token': self.target_api_token}, headers={'accept': 'application/json'}).json()['MediaContainer']['machineIdentifier']
-			if not self.target_machine_id:
-				raise ConnectionError('can\'t connect to target plex server')
-		except Exception:
-			raise ConnectionError('can\'t connect to target plex server')
-
-		if not (self.source_ip or self.source_port or self.source_api_token) or not (self.target_ip or self.target_port or self.target_api_token):
-			raise ConnectionError('required variables were not all given a value')
-		#setup connection to source and target for easy use
-		self.source_ssn = requests.Session()
-		self.source_ssn.headers.update({'accept': 'application/json'})
-		self.source_ssn.params.update({'X-Plex-Token': self.source_api_token})
-		self.source_baseurl = 'http://' + self.source_ip + ':' + self.source_port
-		self.target_ssn = requests.Session()
-		self.target_ssn.headers.update({'accept': 'application/json'})
-		self.target_ssn.params.update({'X-Plex-Token': self.target_api_token})
-		self.target_baseurl = 'http://' + self.target_ip + ':' + self.target_port
-
-	def __find_on_target(self, source_entry):
-		search_output = self.target_ssn.get(self.target_baseurl + '/search', params={'query': source_entry['title']}).json()['MediaContainer']
-		if 'Metadata' in search_output.keys():
-			for search_result in search_output['Metadata']:
-				#standard check to see if search result is same as source media
-				if str(search_result['title']) == str(source_entry['title']) \
-				and source_entry['type'] == search_result['type'] \
-				and 'duration' in search_result.keys() \
-				and 'duration' in source_entry.keys() \
-				and int(search_result['duration']) >= int(source_entry['duration']) - 2500 \
-				and int(search_result['duration']) <= int(source_entry['duration']) + 2500:
-					#media-type specific checks to see if search result is same as source media
-					if source_entry['type'] == 'episode':
-						if int(search_result['index']) == int(source_entry['index']) \
-						and int(search_result['parentIndex']) == int(source_entry['parentIndex']):
-							return search_result
-					elif source_entry['type'] == 'movie' or source_entry['type'] == 'show':
-						if int(search_result['year']) == int(source_entry['year']):
-							return search_result
-					else:
-						return search_result
-
-	def __movie_process(self, movie):
-		global source_target_mirror
-		#find movie on target server
-		if str(movie['ratingKey']) in source_target_mirror.keys():
-			search_result = source_target_mirror[str(movie['ratingKey'])]
-		else:
-			search_result = self.__find_on_target(movie)
-			source_target_mirror[str(movie['ratingKey'])] = search_result
-		if search_result:
-			#movie found on target server
-			rating_key = search_result['ratingKey']
-			if not 'viewOffset' in movie.keys() and 'viewCount' in movie.keys() and (not 'viewCount' in search_result.keys() or 'viewOffset' in search_result.keys()):
-				#movie is marked as seen on source but not on target so update on target
-				self.target_ssn.get(self.target_baseurl + '/:/scrobble', params={'identifier': 'com.plexapp.plugins.library', 'key': rating_key})
-			elif not 'viewOffset' in movie.keys() and not 'viewCount' in movie.keys() and ('viewCount' in search_result.keys() or 'viewOffset' in search_result.keys()):
-				#movie is marked as not seen on source but marked as seen on target so update on target
-				self.target_ssn.get(self.target_baseurl + '/:/unscrobble', params={'identifier': 'com.plexapp.plugins.library', 'key': rating_key})
-			elif 'viewOffset' in movie.keys() and (not 'viewOffset' in search_result.keys() or not search_result['viewOffset'] == movie['viewOffset']):
-				#movie is not completly played but this is not reflected on target server or not at same offset
-				self.target_ssn.get(self.target_baseurl + '/:/progress', params={'key': str(rating_key), 'identifier': 'com.plexapp.plugins.library', 'time': str(movie['viewOffset']), 'state': 'stopped'})
-
-	def __show_process(self, show):
-		global source_target_mirror
-		#find show on target server
-		if str(show['ratingKey']) in source_target_mirror.keys():
-			search_result = source_target_mirror[str(show['ratingKey'])]
-		else:
-			search_result = self.__find_on_target(show)
-			source_target_mirror[str(show['ratingKey'])] = search_result
-		if search_result:
-			#show found on target server
-			rating_key = search_result['ratingKey']
-			if show['viewedLeafCount'] == 0:
-				#no episode of show is watched so just mark the whole show as not watched
-				self.target_ssn.get(self.target_baseurl + '/:/unscrobble', params={'identifier': 'com.plexapp.plugins.library', 'key': search_result['ratingKey']})
-			elif show['viewedLeafCount'] == show['leafCount']:
-				#every episode of the show is watched so mark the whole show as watched
-				self.target_ssn.get(self.target_baseurl + '/:/scrobble', params={'identifier': 'com.plexapp.plugins.library', 'key': search_result['ratingKey']})
-			else:
-				#watched and unwatched are mixed in the show
-				source_series_output = self.source_ssn.get(self.source_baseurl + '/library/metadata/' + show['ratingKey'] + '/allLeaves').json()['MediaContainer']['Metadata']
-				target_series_output = self.target_ssn.get(self.target_baseurl + '/library/metadata/' + rating_key + '/allLeaves').json()['MediaContainer']['Metadata']
-				source_target_episode_mirror = {}
-				for episode in target_series_output:
-					source_target_episode_mirror[str('S' + str(episode['parentIndex']) + 'E' + str(episode['index']))] = episode
-				for episode in source_series_output:
-					#do this for every episode of the series
-					if str('S' + str(episode['parentIndex']) + 'E' + str(episode['index'])) in source_target_episode_mirror.keys():
-						target_episode = source_target_episode_mirror[str('S' + str(episode['parentIndex']) + 'E' + str(episode['index']))]
-						source_target_mirror[str(episode['ratingKey'])] = target_episode
-					else: continue
-					if not 'viewOffset' in episode.keys() and 'viewCount' in episode.keys() and (not 'viewCount' in target_episode.keys() or 'viewOffset' in target_episode.keys()):
-						#episode is marked as seen on source but not on target so update on target
-						self.target_ssn.get(self.target_baseurl + '/:/scrobble', params={'identifier': 'com.plexapp.plugins.library', 'key': target_episode['ratingKey']})
-					elif not 'viewOffset' in episode.keys() and not 'viewCount' in episode.keys() and ('viewCount' in target_episode.keys() or 'viewOffset' in target_episode.keys()):
-						#episode is marked as not seen on source but marked as seen on target so update on target
-						self.target_ssn.get(self.target_baseurl + '/:/unscrobble', params={'identifier': 'com.plexapp.plugins.library', 'key': target_episode['ratingKey']})
-					elif 'viewOffset' in episode.keys() and (not 'viewOffset' in target_episode.keys() or not target_episode['viewOffset'] == episode['viewOffset']):
-						#episode is not completly played but this is not reflected on target server or not at same offset
-						self.target_ssn.get(self.target_baseurl + '/:/progress', params={'key': str(target_episode['ratingKey']), 'identifier': 'com.plexapp.plugins.library', 'time': str(episode['viewOffset']), 'state': 'stopped'})
-
-	def watch_history(self):
-		global source_target_mirror
-		print(self.username + ':	Watch History')
-		source_libs = self.source_ssn.get(self.source_baseurl + '/library/sections').json()['MediaContainer']
-		if not 'Directory' in source_libs.keys(): return
-		for directory in source_libs['Directory']:
-			#do this for every directory on the source server
-			print(self.username + ':		' + directory['title'])
-			lib_output = self.source_ssn.get(self.source_baseurl + '/library/sections/' + str(directory['key']) + '/all').json()['MediaContainer']['Metadata']
-			if directory['type'] == 'movie':
-				#directory is a movie dir
-				for movie in lib_output:
-					#do this for every movie in the lib
-					movie_process_thread = threading.Thread(target=self.__movie_process, name="Movie process", args=(movie,))
-					movie_process_thread.start()
-				movie_process_thread.join()
-
-			elif directory['type'] == 'show':
-				#directory is a show dir
-				for show in lib_output:
-					#do this for every show in the lib
-					show_process_thread = threading.Thread(target=self.__show_process, name="Show process", args=(show,))
-					show_process_thread.start()
-				show_process_thread.join()
-			else:
-				#directory isn't supported yet
-				print(self.username + ':			' + str(directory['title']) + ' is a ' + directory['type'] + ' directory which isn\'t supported (yet)')
-				continue
 		return
 
-	def playlists(self):
-		global target_playlist_keys
-		global source_target_mirror
-		print(self.username + ':	Playlists')
-		source_playlists = self.source_ssn.get(self.source_baseurl + '/playlists').json()['MediaContainer']
-		if source_playlists['size'] == 0: return
-		for playlist in source_playlists['Metadata']:
-			#do this for every playlist of the user on the source server
-			target_playlist_keys = []
-			#it would be very hard and power consuming to check if the playlist (if it already exists) is unique to the source playlist and if not to fix it,
-			#thus it's easier to just delete the current target playlist (if it already exists) and create it again
-			target_playlist_output = self.target_ssn.get(self.target_baseurl + '/playlists').json()['MediaContainer']
-			if 'Metadata' in target_playlist_output.keys():
-				for target_playlist in target_playlist_output['Metadata']:
-					if target_playlist['title'] == playlist['title']:
-						#playlist found on target server with same name as source playlist; removing to ensure playlist is really synced
-						self.target_ssn.delete(self.target_baseurl + '/playlists/' + target_playlist['ratingKey'])
-			if playlist['smart'] == False:
-				print(self.username + ':		' + str(playlist['title']))
-				#find the ratingKeys of the media in the source playlist on the target server
-				playlist_items = self.source_ssn.get(self.source_baseurl + playlist['key']).json()['MediaContainer']
-				if not 'Metadata' in playlist_items.keys(): continue
-				for source_entry in playlist_items['Metadata']:
-					#do this for every entry in the source playlist
-					#find media on target server
-					if str(source_entry['ratingKey']) in source_target_mirror.keys():
-						search_result = source_target_mirror[str(source_entry['ratingKey'])]
-					else:
-						search_result = self.__find_on_target(source_entry)
-						source_target_mirror[str(source_entry['ratingKey'])] = search_result
-					if search_result:
-						#media found on target server
-						target_playlist_keys.append(str(search_result['ratingKey']))
-					else:
-						print(str(source_entry))
-				#list of media ids (target) is created so make playlist with those ids, sync the poster and sync the summary if present
-				target_playlist_id = self.target_ssn.post(self.target_baseurl + '/playlists', params={'type': playlist['playlistType'], 'title': playlist['title'], 'smart': '0', 'uri': 'server://' + self.target_machine_id + '/com.plexapp.plugins.library/library/metadata/' + ','.join(target_playlist_keys)}).json()['MediaContainer']['Metadata'][0]['ratingKey']
-				if 'thumb' in playlist.keys():
-					if '?' in playlist['thumb']: self.target_ssn.post(self.target_baseurl + '/library/metadata/' + target_playlist_id + '/posters', params={'url': self.source_baseurl + playlist['thumb'] + '&X-Plex-Token=' + self.source_api_token})
-					else: self.target_ssn.post(self.target_baseurl + '/library/metadata/' + target_playlist_id + '/posters', params={'url': self.source_baseurl + playlist['thumb'] + '?X-Plex-Token=' + self.source_api_token})
-				else: self.target_ssn.post(self.target_baseurl + '/library/metadata/' + target_playlist_id + '/posters', params={'url': self.source_baseurl + playlist['composite'] + '?X-Plex-Token=' + self.source_api_token})
-				if 'summary' in playlist.keys():
-					self.target_ssn.put(self.target_baseurl + '/playlists/' + target_playlist_id, params={'summary': str(playlist['summary'])})
-			else:
-				print(self.username + ':		Smart playlists aren\'t supported (yet)')
-		return
+	#utility functions
+	def __get_data(self, source: str, link: str, params: dict={}, refresh: bool=False, json: bool=True):
+		if f'{link}{params}' in self.cache[source] and refresh == False:
+			return self.cache[source][f'{link}{params}']
+		else:
+			if source == 'source':
+				result = self.source_ssn.get(f'{self.source_base_url}{link}', params=params)
+				if json == True:
+					result = result.json()
+			elif source == 'target':
+				result = self.target_ssn.get(f'{self.target_base_url}{link}', params=params)
+				if json == True:
+					result = result.json()
+			self.cache[source][f'{link}{params}'] = result
+			return result
 
-	def __collection_process(self, collection):
-		global source_target_mirror
-		global target_collections
-		col_title = collection['title']
-		col_thumb = collection['thumb']
-		col_ratingkey = collection['ratingKey']
-		source_collection_output = self.source_ssn.get(self.source_baseurl + '/library/collections/' + col_ratingkey + '/children').json()['MediaContainer']
-		#check if collection with name already exists on target server; if so, delete collection
-		for target_collection in target_collections:
-			if target_collection['title'] == col_title:
-				#collection found on target server with same name as source collection; removing to ensure collection is really synced
-				self.target_ssn.delete(self.target_baseurl + '/library/collections/' + target_collection['ratingKey'])
-		if not 'Metadata' in source_collection_output.keys(): return
-		target_collection_keys = {}
-		for source_entry in source_collection_output['Metadata']:
-			#do this for every entry in the source collection
-			#find the media on the target server
-			if str(source_entry['ratingKey']) in source_target_mirror.keys():
-				search_result = source_target_mirror[str(source_entry['ratingKey'])]
+	def __find_on_target(self, guid: list=[], title: str='', type: str=None):
+		sections = self.__get_data('target','/library/sections')['MediaContainer'].get('Directory', None)
+		if sections == None: return None
+
+		for lib in sections:
+			#skip invalid lib
+			if not lib['type'] in ('show','movie','artist'): continue
+			#skip libs that don't contain the media type
+			if type != None:
+				if lib['type'] == 'show' and not type in ('episode','season','show'): continue
+				if lib['type'] == 'artist' and not type in ('track','artist'): continue
+				if lib['type'] == 'movie' and type != 'movie': continue
+
+			if lib['type'] == 'show':
+				if type == 'episode': content_type = '4'
+				elif type == 'season': content_type = '3'
+				else: content_type = ''
+			elif lib['type'] == 'artist':
+				if type == 'track': content_type = '10'
+				elif type == 'artist': content_type = '8'
+			elif lib['type'] == 'movie': content_type = '1'
+
+			if any((lib['type'] == 'show' and type == 'show', lib['type'] == 'movie' and type == 'movie')):
+				lib_output = self.__get_data('target',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1'})['MediaContainer']['Metadata']
 			else:
-				search_result = self.__find_on_target(source_entry)
-				source_target_mirror[str(source_entry['ratingKey'])] = search_result
-			if search_result:
+				lib_output = self.__get_data('target',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1', 'type': content_type})['MediaContainer']['Metadata']
+			for entry in lib_output:
+				if (guid and 'Guid' in entry and entry['Guid'] == guid) or (title and 'title' in entry and entry['title'] == title):
+					#media found on target server
+					return entry
+		return None
+
+	#THE function to run
+	def start_sync(self):
+		#sync non-user-specific data
+		if 'collections' in self.sync:
+			start_time = perf_counter()
+			self._collections()
+			print(f'Collections time: {round(perf_counter() - start_time,3)}s')
+
+		if 'posters' in self.sync:
+			start_time = perf_counter()
+			self._posters()
+			print(f'Posters time: {round(perf_counter() - start_time,3)}s')
+
+		#sync user-specific data
+		if 'watch_history' in self.sync:
+			start_time = perf_counter()
+			self._watch_history()
+			print(f'Watch History time: {round(perf_counter() - start_time,3)}s')
+
+		if 'playlists' in self.sync:
+			start_time = perf_counter()
+			self._playlists()
+			print(f'Playlists time: {round(perf_counter() - start_time,3)}s')
+
+		return list(set(self.result_json))
+
+	#non-user-specific actions
+	async def __process_collections(self, source_collection, target_lib, content_type):
+		session = ClientSession()
+		tasks = []
+		print(f'	{source_collection["title"]}')
+
+		#add collection on target server
+		source_collection_content = self.__get_data('source',f'/library/collections/{source_collection["ratingKey"]}/children', params={'includeGuids': '1'})['MediaContainer']['Metadata']
+		target_collection_content = []
+		for entry in source_collection_content:
+			target_ratingkey = self.__find_on_target(guid=entry['Guid'] if 'Guid' in entry else [], title=entry['title'] if 'title' in entry else '')
+			if target_ratingkey != None:
 				#media found on target server
-				if not str(search_result['librarySectionID']) in target_collection_keys.keys():
-					target_collection_keys[str(search_result['librarySectionID'])] = []
-				target_collection_keys[str(search_result['librarySectionID'])].append(str(search_result['ratingKey']))
-		target_lib_id = ''
-		for target_lib_id_contestant in target_collection_keys.keys():
-			if len(target_collection_keys[target_lib_id_contestant]) == len(source_collection_output['Metadata']):
-				target_lib_id = str(target_lib_id_contestant)
-				target_collection_keys = target_collection_keys[str(target_lib_id_contestant)]
-				break
-		if target_lib_id:
-			#library found on target server that has every entry of source collection so adding collection there
-			#create the collection on the target server, sync the summary if present and sync the poster
-			target_collection_id = self.target_ssn.post(self.target_baseurl + '/library/collections', params={'type': 1, 'title': str(col_title), 'smart': 0, 'sectionId': target_lib_id, 'uri': 'server://' + self.target_machine_id + '/com.plexapp.plugins.library/library/metadata/' + ','.join(target_collection_keys)}).json()['MediaContainer']['Metadata'][0]['ratingKey']
-			if '?' in col_thumb: self.target_ssn.post(self.target_baseurl + '/library/metadata/' + target_collection_id + '/posters', params={'url': self.source_baseurl + col_thumb + '&X-Plex-Token=' + self.source_api_token})
-			else: self.target_ssn.post(self.target_baseurl + '/library/metadata/' + target_collection_id + '/posters', params={'url': self.source_baseurl + col_thumb + '?X-Plex-Token=' + self.source_api_token})
-			if 'summary' in collection:
-				self.target_ssn.put(self.target_baseurl + '/library/sections/' + target_lib_id + '/all', params={'type': '18', 'id': target_collection_id, 'summary.value': collection['summary']})
+				target_collection_content.append(target_ratingkey['ratingKey'])
+		if not target_collection_content: return
 
-	def collections(self):
-		global source_target_mirror
-		global target_collections
-		print(self.username + ':	Collections')
-		source_libs = self.source_ssn.get(self.source_baseurl + '/library/sections').json()['MediaContainer']
-		target_collections = []
-		target_libs = self.target_ssn.get(self.target_baseurl + '/library/sections').json()['MediaContainer']
-		if not 'Directory' in target_libs.keys(): return
-		for target_lib in target_libs['Directory']:
-			target_lib_collections = self.target_ssn.get(self.target_baseurl + '/library/sections/' + str(target_lib['key']) + '/collections').json()['MediaContainer']
-			if not 'Metadata' in target_lib_collections.keys(): continue
-			for target_collection in target_lib_collections['Metadata']:
-				target_collections.append(target_collection)
-		if not 'Directory' in source_libs.keys(): return
-		for source_lib in source_libs['Directory']:
-			#do this for every directory on the source server
-			lib_id = str(source_lib['key'])
-			lib_type = source_lib['type']
-			print(self.username + ':		' + source_lib['title'])
-			if lib_type == 'movie' or lib_type == 'show':
-				#source library is a movie or show lib
-				lib_col = self.source_ssn.get(self.source_baseurl + '/library/sections/' + lib_id + '/collections').json()['MediaContainer']
-				if not 'Metadata' in lib_col: continue
-				for collection in lib_col['Metadata']:
-					#do this for every collection in the source lib
-					collection_process_thread = threading.Thread(target=self.__collection_process, name="Collection process", args=(collection,))
-					collection_process_thread.start()
-				collection_process_thread.join()
+		new_ratingkey = self.target_ssn.post(f'{self.target_base_url}/library/collections', params={'title': source_collection['title'], 'smart': '0', 'sectionId': target_lib['key'], 'type': content_type, 'uri': f'server://{self.target_machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(target_collection_content)}'}).json()['MediaContainer']['Metadata'][0]['ratingKey']
+		#sync settings and poster
+		if 'thumb' in source_collection:
+			tasks.append(session.post(f'{self.target_base_url}/library/collections/{new_ratingkey}/posters', params={'url': f'{self.source_base_url}{source_collection["thumb"]}?X-Plex-Token={self.source_api_token}','X-Plex-Token': self.target_api_token}))
+		self.result_json += target_collection_content
+		#launch all the upload requests at the same time
+		await gather(*tasks)
+		await session.close()
+
+	def _collections(self):
+		print('Collections')
+
+		#get sections on both servers
+		source_sections = self.__get_data('source','/library/sections')['MediaContainer'].get('Directory', None)
+		if source_sections == None: return 'No libraries on the source server'
+		target_sections = self.__get_data('target','/library/sections')['MediaContainer'].get('Directory', None)
+		if target_sections == None: return 'No libraries on the target server'
+
+		#loop through the source libraries
+		for source_lib in source_sections:
+			if not source_lib['type'] in ('show','movie','artist'): continue
+			if source_lib['type'] == 'show': content_type = 4
+			elif source_lib['type'] == 'movie': content_type = 1
+			elif source_lib['type'] == 'artist': content_type = 10
+
+			#find the matching library on the target server
+			for target_lib_entry in target_sections:
+				if target_lib_entry['type'] == source_lib['type'] and target_lib_entry['title'] == source_lib['title']:
+					target_lib = target_lib_entry
+					break
 			else:
-				#directory isn't supported (yet) or can't have collections
-				print(self.username + ':			' + str(source_lib['title']) + ' is a ' + source_lib['type'] + ' directory which isn\'t supported (yet) or doesn\'t allow collections')
 				continue
-		return
 
-	def __poster_process(self, source_media, lib_type):
-		global source_target_mirror
-		#find movie/show on target server
-		if str(source_media['ratingKey']) in source_target_mirror.keys():
-			search_result = source_target_mirror[str(source_media['ratingKey'])]
-		else:
-			search_result = self.__find_on_target(source_media)
-			source_target_mirror[str(source_media['ratingKey'])] = search_result
-		if search_result:
-			#movie/show found on target server
-			rating_key = search_result['ratingKey']
-			source_poster = source_media['thumb']
-			self.target_ssn.post(self.target_baseurl + '/library/metadata/' + rating_key + '/posters', params={'url': self.source_baseurl + source_poster + '?X-Plex-Token=' + self.source_api_token})
-			if lib_type == 'show':
-				#do seasons too
-				source_series_output = self.source_ssn.get(self.source_baseurl + '/library/metadata/' + source_media['ratingKey'] + '/children').json()['MediaContainer']['Metadata']
-				target_series_output = self.target_ssn.get(self.target_baseurl + '/library/metadata/' + rating_key + '/children').json()['MediaContainer']['Metadata']
-				source_target_season_mirror = {}
-				for season in target_series_output:
-					source_target_season_mirror[str(season['index'])] = season
-				for season in source_series_output:
-					#do this for every season of the series
-					if str(season['index']) in source_target_season_mirror.keys():
-						target_season = source_target_season_mirror[str(season['index'])]
-					else: continue
-					target_season_ratingkey = target_season['ratingKey']
-					source_poster = season['thumb']
-					self.target_ssn.post(self.target_baseurl + '/library/metadata/' + target_season_ratingkey + '/posters', params={'url': self.source_baseurl + source_poster + '?X-Plex-Token=' + self.source_api_token})
+			#get the collections in the library on both servers
+			source_collections = self.__get_data('source',f'/library/sections/{source_lib["key"]}/collections')['MediaContainer'].get('Metadata', [])
+			target_collections = self.__get_data('target',f'/library/sections/{target_lib["key"]}/collections')['MediaContainer'].get('Metadata', [])
 
-	def posters(self):
-		global source_target_mirror
-		print(self.username + ':	Posters')
-		source_libs = self.source_ssn.get(self.source_baseurl + '/library/sections').json()['MediaContainer']
-		if not 'Directory' in source_libs.keys(): return
-		for source_lib in source_libs['Directory']:
-			print(self.username + ':		' + source_lib['title'])
-			lib_id = str(source_lib['key'])
-			lib_type = source_lib['type']
-			if lib_type  == 'movie' or lib_type == 'show':
-				#source library is a movie or show library
-				source_lib_output = self.source_ssn.get(self.source_baseurl + '/library/sections/' + lib_id + '/all').json()['MediaContainer']['Metadata']
-				for source_media in source_lib_output:
-					#do this for every media in the source lib
-					poster_process_thread = threading.Thread(target=self.__poster_process, name="Poster process", args=(source_media,lib_type,))
-					poster_process_thread.start()
-				poster_process_thread.join()
-			else:
-				#directory isn't supported (yet)
-				print(self.username + ':			' + str(source_lib['title']) + ' is a ' + lib_type + ' directory which isn\'t supported (yet)')
-				continue
-		return
+			#delete all collections to keep deleted collections synced
+			for target_collection in target_collections:
+				self.target_ssn.delete(f'{self.target_base_url}/library/collections/{target_collection["ratingKey"]}')
+
+			#sync each source collection with the target server
+			for source_collection in source_collections:
+				run(self.__process_collections(source_collection, target_lib, content_type))
+
+		return self.result_json
+
+	async def __process_posters(self, lib):
+		if not lib['type'] in ('show','movie','artist'): return
+		if lib['type'] == 'show': content_type = '4'
+		elif lib['type'] == 'movie': content_type = '1'
+		elif lib['type'] == 'artist': content_type = '10'
+
+		session = ClientSession()
+		tasks = []
+		print(f'	{lib["title"]}')
+		#sync series/season posters
+		if lib['type'] == 'show':
+			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1'})['MediaContainer']['Metadata']
+			for show in lib_output:
+				key = show['Guid'] if 'Guid' in show else show['title']
+				if not str(key) in self.map:
+					target_ratingkey = self.__find_on_target(guid=show['Guid'] if 'Guid' in show else [], title=show['title'] if 'title' in show else '', type='show')
+					if target_ratingkey == None: continue
+					self.map[str(key)] = target_ratingkey['ratingKey']
+
+				tasks.append(session.post(f'{self.target_base_url}/library/metadata/{self.map[str(key)]}/posters', params={'url': f'{self.source_base_url}{show["thumb"]}?X-Plex-Token={self.source_api_token}','X-Plex-Token': self.target_api_token}))
+
+			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1', 'type': '3'})['MediaContainer']['Metadata']
+			for season in lib_output:
+				key = season['Guid'] if 'Guid' in season else season['title']
+				if not str(key) in self.map:
+					target_ratingkey = self.__find_on_target(guid=season['Guid'] if 'Guid' in season else [], title=season['title'] if 'title' in season else '', type='season')
+					if target_ratingkey == None: continue
+					self.map[str(key)] = target_ratingkey['ratingKey']
+				
+				tasks.append(session.post(f'{self.target_base_url}/library/metadata/{self.map[str(key)]}/posters', params={'url': f'{self.source_base_url}{season["thumb"]}?X-Plex-Token={self.source_api_token}','X-Plex-Token': self.target_api_token}))
+
+		#if said so, skip syncing episode posters
+		if lib['type'] != 'show' or (self.sync_episode_posters == True and lib['type'] == 'show'):
+			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'type': content_type, 'includeGuids': '1'})['MediaContainer']['Metadata']
+			#make map of media: guids or title -> target ratingkey
+			for entry in lib_output:
+				key = entry['Guid'] if 'Guid' in entry else entry['title']
+				if str(key) in self.map: continue
+
+				target_ratingkey = self.__find_on_target(guid=entry['Guid'] if 'Guid' in entry else [], title=entry['title'] if 'title' in entry else '', type=entry['type'])
+				if target_ratingkey == None: continue
+				self.map[str(key)] = target_ratingkey['ratingKey']
+
+			#go through every media item in the library
+			for entry in lib_output:
+				if not 'thumb' in entry: continue
+				key = entry['Guid'] if 'Guid' in entry else entry['title']
+				if not str(key) in self.map: continue
+				target_ratingkey = self.map[str(key)]
+
+				#add the request that will upload the poster to target media to a queue
+				tasks.append(session.post(f'{self.target_base_url}/library/metadata/{target_ratingkey}/posters', params={'url': f'{self.source_base_url}{entry["thumb"]}?X-Plex-Token={self.source_api_token}','X-Plex-Token': self.target_api_token}))
+				self.result_json.append(entry['ratingKey'])
+		#launch all the upload requests at the same time
+		await gather(*tasks)
+		await session.close()
+
+	def _posters(self):
+		print('Posters')
+
+		#get sections on source server
+		sections = self.__get_data('source','/library/sections')['MediaContainer'].get('Directory', None)
+		if sections == None: return 'No libraries on the source server'
+
+		#process every library (at the same time) in __process_posters
+		for lib in sections:
+			run(self.__process_posters(lib))
+		return self.result_json
+
+	#user-specific actions
+	def _watch_history(self):
+		print('Watch History')
+
+		#get list of tokens (users) to apply action to
+		if not self.user_tokens:
+			from re import findall as re_findall
+
+			source_shared_users = self.source_ssn.get(f'http://plex.tv/api/servers/{self.source_machine_id}/shared_servers', headers={}).text
+			target_shared_users = self.target_ssn.get(f'http://plex.tv/api/servers/{self.target_machine_id}/shared_servers', headers={}).text
+
+			#add user self if requested
+			if '@me' in self.users or '@all' in self.users:
+				self.user_tokens.append(['@me', self.source_api_token, self.target_api_token])
+
+			#get data about every user (username at beginning and token at end)
+			source_user_data = re_findall(r'(?<=username=").*?accessToken="\w+?(?=")', source_shared_users)
+			for source_user in source_user_data:
+				username = source_user.split('"')[0]
+				if not '@all' in self.users and not username in self.users:
+					continue
+				source_token = source_user.split('"')[-1]
+				target_token = re_findall(rf'username="{username}.*?accessToken="\w+?(?=")', target_shared_users)
+				if target_token:
+					self.user_tokens.append([username, source_token, target_token[0].split('"')[-1]])
+
+		for user_token in self.user_tokens:
+			print(f'	{user_token[0]}')
+
+			#get sections on source server
+			sections = self.__get_data('source', '/library/sections', params={'X-Plex-Token': user_token[1]})['MediaContainer'].get('Directory', [])
+
+			#process every library (at the same time) in __process_watch_history
+			for lib in sections:
+				if not lib['type'] in ('show','movie','artist'): return
+				if lib['type'] == 'show': content_type = '4'
+				elif lib['type'] == 'movie': content_type = '1'
+				elif lib['type'] == 'artist': content_type = '10'
+
+				handled_series = []
+				print(f'		{lib["title"]}')
+				#sync complete series to skip syncing every episode (reducing requests)
+				if lib['type'] == 'show':
+					lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1'})['MediaContainer']['Metadata']
+					for show in lib_output:
+						if not (show['viewedLeafCount'] == 0 or show['viewedLeafCount'] == show['leafCount']): continue
+						key = show['Guid'] if 'Guid' in show else show['title']
+						if not str(key) in self.map:
+							target_ratingkey = self.__find_on_target(guid=show['Guid'] if 'Guid' in show else [], title=show['title'] if 'title' in show else '', type='show')
+							if target_ratingkey == None: continue
+							self.map[str(key)] = target_ratingkey['ratingKey']
+
+						if show['viewedLeafCount'] == 0:
+							#mark complete series as not-viewed
+							self.target_ssn.get(f'{self.target_base_url}/:/scrobble', params={'identifier': 'com.plexapp.plugins.library', 'key': self.map[str(key)], 'X-Plex-Token': user_token[2]})
+						else:
+							#mark complete series as viewed
+							self.target_ssn.get(f'{self.target_base_url}/:/unscrobble', params={'identifier': 'com.plexapp.plugins.library', 'key': self.map[str(key)], 'X-Plex-Token': user_token[2]})
+						handled_series.append(show['ratingKey'])
+
+				lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'type': content_type, 'includeGuids': '1', 'X-Plex-Token': user_token[1]})['MediaContainer']['Metadata']
+				#make map of media: guids or title -> target ratingkey
+				for entry in lib_output:
+					if lib['type'] == 'show' and entry['grandparentRatingKey'] in handled_series: continue
+					key = entry['Guid'] if 'Guid' in entry else entry['title']
+					if str(key) in self.map: continue
+
+					target_ratingkey = self.__find_on_target(guid=entry['Guid'] if 'Guid' in entry else [], title=entry['title'] if 'title' in entry else '', type=entry['type'])
+					if target_ratingkey == None: continue
+					self.map[str(key)] = target_ratingkey['ratingKey']
+
+				#go through every media item in the library
+				for entry in lib_output:
+					key = entry['Guid'] if 'Guid' in entry else entry['title']
+					if not str(key) in self.map: continue
+					target_ratingkey = self.map[str(key)]
+
+					#add the request that will set the watched status for the target media to a queue
+					if 'viewOffset' in entry:
+						#set media to offset (partially watched; on deck)
+						self.target_ssn.get(f'{self.target_base_url}/:/progress', params={'identifier': 'com.plexapp.plugins.library', 'key': target_ratingkey, 'time': entry['viewOffset'], 'state': 'stopped', 'X-Plex-Token': user_token[2]})
+					elif 'viewCount' in entry:
+						#mark media as watched
+						self.target_ssn.get(f'{self.target_base_url}/:/scrobble', params={'identifier': 'com.plexapp.plugins.library', 'key': target_ratingkey, 'X-Plex-Token': user_token[2]})
+					elif not 'viewCount' in entry:
+						#mark media as not-watched
+						self.target_ssn.get(f'{self.target_base_url}/:/unscrobble', params={'identifier': 'com.plexapp.plugins.library', 'key': target_ratingkey, 'X-Plex-Token': user_token[2]})
+					self.result_json.append(entry['ratingKey'])
+
+		return self.result_json
+
+	def _playlists(self):
+		print('Playlists')
+
+		#get list of tokens (users) to apply action to
+		if not self.user_tokens:
+			from re import findall as re_findall
+
+			source_shared_users = self.source_ssn.get(f'http://plex.tv/api/servers/{self.source_machine_id}/shared_servers', headers={}).text
+			target_shared_users = self.target_ssn.get(f'http://plex.tv/api/servers/{self.target_machine_id}/shared_servers', headers={}).text
+
+			#add user self if requested
+			if '@me' in self.users or '@all' in self.users:
+				self.user_tokens.append(['@me', self.source_api_token, self.target_api_token])
+
+			#get data about every user (username at beginning and token at end)
+			source_user_data = re_findall(r'(?<=username=").*?accessToken="\w+?(?=")', source_shared_users)
+			for source_user in source_user_data:
+				username = source_user.split('"')[0]
+				if not '@all' in self.users and not username in self.users:
+					continue
+				source_token = source_user.split('"')[-1]
+				target_token = re_findall(rf'username="{username}.*?accessToken="\w+?(?=")', target_shared_users)
+				if target_token:
+					self.user_tokens.append([username, source_token, target_token[0].split('"')[-1]])
+
+		for user_token in self.user_tokens:
+			print(f'	{user_token[0]}')
+
+			#get playlists of user
+			source_playlists = self.__get_data('source','/playlists', params={'includeGuids': '1', 'X-Plex-Token': user_token[1]})['MediaContainer'].get('Metadata', [])
+			target_playlists = self.__get_data('target','/playlists', params={'includeGuids': '1', 'X-Plex-Token': user_token[2]})['MediaContainer'].get('Metadata', [])
+
+			#delete all playlists to keep deleted playlists synced
+			for target_playlist in target_playlists:
+				self.target_ssn.delete(f'{self.target_base_url}/playlists/{target_playlist["ratingKey"]}', params={'X-Plex-Token': user_token[2]})
+
+			#sync source playlists to target server
+			for playlist in source_playlists:
+				print(f'		{playlist["title"]}')
+				source_playlist_info = self.__get_data('source', f'/playlists/{playlist["ratingKey"]}', params={'X-Plex-Token': user_token[1]})['MediaContainer']['Metadata'][0]
+				source_playlist_content = self.__get_data('source',f'/playlists/{playlist["ratingKey"]}/items', params={'includeGuids': '1', 'X-Plex-Token': user_token[1]})['MediaContainer'].get('Metadata', None)
+				if source_playlist_content == None: continue
+				#make map of media: guids or title -> target ratingkey
+				for entry in source_playlist_content:
+					key = entry['Guid'] if 'Guid' in entry else entry['title']
+					if str(key) in self.map: continue
+
+					target_ratingkey = self.__find_on_target(guid=entry['Guid'] if 'Guid' in entry else [], title=entry['title'] if 'title' in entry else '', type=entry['type'])
+					if target_ratingkey == None: continue
+					self.map[str(key)] = target_ratingkey['ratingKey']
+
+				#go through every media item in the library
+				target_playlist_content = []
+				for entry in source_playlist_content:
+					key = entry['Guid'] if 'Guid' in entry else entry['title']
+					if not str(key) in self.map: continue
+					target_ratingkey = self.map[str(key)]
+
+					target_playlist_content.append(target_ratingkey)
+					self.result_json.append(entry['ratingKey'])
+				if not target_playlist_content: continue
+
+				new_ratingkey = self.target_ssn.post(f'{self.target_base_url}/playlists', params={'type': 'video', 'title': source_playlist_info['title'], 'smart': '0', 'uri': f'server://{self.target_machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(target_playlist_content)}', 'X-Plex-Token': user_token[2]}).json()['MediaContainer']['Metadata'][0]['ratingKey']
+				#sync settings and poster
+				if 'thumb' in source_playlist_info:
+					self.target_ssn.post(f'{self.target_base_url}/playlists/{new_ratingkey}/posters', params={'url': f'{self.source_base_url}{source_playlist_info["thumb"]}?X-Plex-Token={self.source_api_token}'})
+
+				self.result_json += target_playlist_content
+
+		return self.result_json
 
 if __name__ == '__main__':
-	arguments, values = getopt.getopt(sys.argv[1:], 'hS:T:s:u:', ['Help', 'SourceName=', 'TargetName=', 'Sync=', 'User='])
-	#don't give any value to these variables; see usage at top of file
-	source_server_name = ''
-	target_server_name = ''
-	user_list = []
-	sync_list = []
-	for argument, value in arguments:
-		if argument in ('-h', '--Help'):
-			print('See top of file contents for usage')
-			exit(0)
-		if argument in ('-S', '--SourceName'):
-			if value == main_plex_name: source_server_name = 'main'
-			elif value == backup_plex_name: source_server_name = 'backup'
-			if not source_server_name:
-				print('Error: No server matched name given for ' + argument)
-				exit(1)
-		if argument in ('-T', '--TargetName'):
-			if value == main_plex_name: target_server_name = 'main'
-			elif value == backup_plex_name: target_server_name = 'backup'
-			if not target_server_name:
-				print('Error: No server matched name given for ' + argument)
-				exit(1)
-		if argument in ('-s', '--Sync'):
-			sync_list.append(str(value))
-		if argument in ('-u', '--User'):
-			user_list.append(str(value))
+	from requests import Session as requests_Session
+	from argparse import ArgumentParser
 
-	if not source_server_name or not target_server_name:
-		print('Error: Arguments were not all given')
-		exit(1)
+	#setup vars
+	og_start_time = perf_counter()
+	main_ssn = requests_Session()
+	main_ssn.headers.update({'Accept': 'application/json'})
+	main_ssn.params.update({'X-Plex-Token': main_plex_api_token})
+	backup_ssn = requests_Session()
+	backup_ssn.headers.update({'Accept': 'application/json'})
+	backup_ssn.params.update({'X-Plex-Token': backup_plex_api_token})
 
-	sync_session = sync(source_server_name, target_server_name, pre=True)
-	username_list = ['Admin']
-	#api tokens of applied users of source server
-	user_share_output = requests.get('http://plex.tv/api/servers/' + sync_session.source_machine_id + '/shared_servers', params={'X-Plex-Token': sync_session.source_api_token}).text
-	source_user_token_list = [sync_session.source_api_token]
-	if not user_list:
-		source_user_token_list.append(str(sync_session.source_api_token))
-		username_list.append(str('@me'))
-	elif '@all' in user_list:
-		for user_data in re.findall('(?<=username=").*accessToken=".*?(?=" )', user_share_output):
-			source_user_token_list.append(str(re.search('[^"]+$', user_data).group(0)))
-			username_list.append(str(re.search('^.*?(?=" )', user_data).group(0)))
-		source_user_token_list.append(str(sync_session.source_api_token))
-		username_list.append(str('@me'))
-	else:
-		for user in user_list:
-			try:
-				if not user == '@me':
-					pre_user_token = str(re.search('(?<=username="' + user + '").*accessToken=".*?(?=")', user_share_output).group(0))
-					source_user_token_list.append(str(re.search('[^"]+$', pre_user_token).group(0)))
-				else:
-					source_user_token_list.append(str(sync_session.source_api_token))
-				username_list.append(str(user))
-			except AttributeError:
-				print('Error: the user "' + user + '" not found on source server')
-				exit(1)
-	#api tokens of applied users of target server
-	user_share_output = requests.get('http://plex.tv/api/servers/' + sync_session.target_machine_id + '/shared_servers', params={'X-Plex-Token': sync_session.target_api_token}).text
-	target_user_token_list = [sync_session.target_api_token]
-	if not user_list:
-		target_user_token_list.append(str(sync_session.target_api_token))
-	elif '@all' in user_list:
-		for username in username_list[1:][:-1]:
-			try:
-				pre_user_token = re.search('username="' + username + '".*?accessToken=\".*?(?=\")', user_share_output).group(0)
-				target_user_token_list.append(re.search('[^"]+$', pre_user_token).group(0))
-			except AttributeError:
-				print('Error: the user "' + username + '" not found on target server')
-				exit(1)
-		target_user_token_list.append(str(sync_session.target_api_token))
-	else:
-		for user in user_list:
-			try:
-				if not user == '@me':
-					pre_user_token = str(re.search('(?<=username="' + user + '").*accessToken=".*?(?=")', user_share_output).group(0))
-					target_user_token_list.append(str(re.search('[^"]+$', pre_user_token).group(0)))
-				else:
-					target_user_token_list.append(str(sync_session.target_api_token))
-			except AttributeError:
-				print('Error: the user "' + user + '" not found on target server')
-				exit(1)
+	#setup arg parsing
+	parser = ArgumentParser(description='Keep data between two plex servers synced.')
+	parser.add_argument('-s','--SourceName', choices=[main_plex_name, backup_plex_name], help='Select the server that the data will be pulled from. It will be uploaded on the other server (target server)', required=True)
+	parser.add_argument('-S','--Sync', choices=['collections','posters','watch_history','playlists'], help='Select what to sync; This argument can be given multiple times', action='append', required=True, default=[])
+	parser.add_argument('-u','--User', help='Apply user-specific sync actions to these users; This argument can be given multiple times; Use @me to target yourself; Use @all to target everyone', action='append', default=['@me'])
+	parser.add_argument('-p','--NoEpisodePosters', help='When selecting "posters" as (one of) the sync action(s), only sync movie, series and season posters and not episode posters', action='store_false')
 
-	loop_count = 1
-	global source_target_mirror
-	source_target_mirror = {}
-	for source_token, target_token in zip(source_user_token_list, target_user_token_list):
-		#do this for every user and also the admin
-		if source_server_name == 'main': main_plex_api_token = source_token
-		elif source_server_name == 'backup': backup_plex_api_token = source_token
-		if target_server_name == 'main': main_plex_api_token = target_token
-		elif target_server_name == 'backup': backup_plex_api_token = target_token
-		if loop_count == 1: sync_session = sync(source_server_name, target_server_name, admin=True)
-		else: sync_session = sync(source_server_name, target_server_name)
-		for sync_type in sync_list:
-			#do the actions specified
-			if loop_count == 1:
-				#admin actions
-				if sync_type == 'Collections': sync_session.collections()
-				if sync_type == 'Posters': sync_session.posters()
-				continue
-			if sync_type == 'Watch History': sync_session.watch_history()
-			if sync_type == 'Playlists': sync_session.playlists()
-		loop_count += 1
+	args = parser.parse_args()
+	#initiate class and process result
+	instance = plex_sync(main_ssn=main_ssn, backup_ssn=backup_ssn, source=args.SourceName, sync=args.Sync, users=args.User, sync_episode_posters=args.NoEpisodePosters)
+	if isinstance(instance, str):
+		parser.error(instance)
+
+	#run sync and process result
+	response = instance.start_sync()
+	if not isinstance(response, list):
+		parser.error(response)
+
+	print(f'\nTotal time: {round(perf_counter() - og_start_time,3)}s')
