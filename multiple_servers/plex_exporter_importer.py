@@ -10,7 +10,7 @@ Requirements (python3 -m pip install [requirement]):
 Setup:
 	Fill the variables below firstly, then run the script.
 To-Do:
-	async? All the posters at the end? fetch lib for every user once, make map and avoid asking individual media every time for every user; import upload at the end?
+	fetch lib for every user once, make map and avoid asking individual media every time for every user
 """
 
 plex_ip = ''
@@ -29,6 +29,16 @@ plex_port = getenv('plex_port', plex_port)
 plex_api_token = getenv('plex_api_token', plex_api_token)
 base_url = f"http://{plex_ip}:{plex_port}"
 poster_queue, settings_queue = {}, {}
+
+async def _download_posters(session, url):
+	async with session.get(url, params={'X-Plex-Token': plex_api_token}) as r:
+		with open(poster_queue[url], 'wb') as f:
+			f.write(await r.read())
+
+async def _export_posters():
+	async with ClientSession() as session:
+		tasks = [_download_posters(session, u) for u in poster_queue.keys()]
+		await gather(*tasks)
 
 def _export_media(type: str, data: dict, ssn, download_poster: bool, download_episode_posters: bool, export_watched: bool, user_data: tuple):
 	result_json = {}
@@ -106,23 +116,12 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, download_ep
 
 	if download_poster == True and (download_episode_posters == True or (download_episode_posters == False and media_info['type'] != 'episode')):
 		if thumb_url != None:
-			thumb = ssn.get(f'{base_url}{thumb_url}').content
+			poster_queue[f'{base_url}{thumb_url}'] = file_thumb
 		if art_url != None:
-			art = ssn.get(f'{base_url}{art_url}').content
-
-	#all data is extracted, put them into files
+			poster_queue[f'{base_url}{art_url}'] = file_art
 
 	#put data into file
 	dump(result_json, open(file_data, 'w+'), indent=4)
-	if download_poster == True and (download_episode_posters == True or (download_episode_posters == False and media_info['type'] != 'episode')):
-		#put thumb (poster) into file
-		if thumb_url != None:
-			with open(file_thumb, 'wb') as f_thumb:
-				f_thumb.write(thumb)
-		#put art (background; fan-art) into file
-		if art_url != None:
-			with open(file_art, 'wb') as f_art:
-				f_art.write(art)
 
 	return result_json
 
@@ -396,7 +395,10 @@ def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, expo
 			return 'Library not found'
 
 	if poster_queue or settings_queue:
-		run(_import_queue())
+		if type == 'import':
+			run(_import_queue())
+		elif type == 'export':
+			run(_export_posters())
 
 	return result_json
 
