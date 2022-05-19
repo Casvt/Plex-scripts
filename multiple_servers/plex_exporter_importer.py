@@ -8,65 +8,61 @@ Requirements (python3 -m pip install [requirement]):
 	requests
 Setup:
 	Fill the variables below firstly, then run the script.
-Note:
-	Changing the value of "Original Date" always results in value of 1970-01-01
-	This is a bug that will be fixed in plex server version 1.26.1
 To-Do:
-	Collections
-	Music lib
-	Playlists
-	Match using guids instead of ratingkey (aka support for cross server)
+	async? All the posters at the end? fetch lib for every user once, make map and avoid asking individual media every time for every user; import upload at the end?
 """
 
 plex_ip = ''
 plex_port = ''
 plex_api_token = ''
 
-import os, json, re
+from os import path, getenv
+from json import dump, load
+from re import findall
 
 # Environmental Variables
-plex_ip = os.getenv('plex_ip', plex_ip)
-plex_port = os.getenv('plex_port', plex_port)
-plex_api_token = os.getenv('plex_api_token', plex_api_token)
+plex_ip = getenv('plex_ip', plex_ip)
+plex_port = getenv('plex_port', plex_port)
+plex_api_token = getenv('plex_api_token', plex_api_token)
 base_url = f"http://{plex_ip}:{plex_port}"
 
-def _export_media(type: str, data: dict, ssn, download_poster: bool, download_episode_posters: bool, export_watched: bool):
+def _export_media(type: str, data: dict, ssn, download_poster: bool, download_episode_posters: bool, export_watched: bool, user_data: tuple):
 	result_json = {}
+	user_ids, user_tokens = user_data
 	#extract different data based on the type
-	keys = []
 	if type == 'movie':
-		keys = [
+		keys = (
 			'title', 'titleSort', 'originalTitle',
 			'originallyAvailableAt', 'contentRating', 'userRating',
 			'studio', 'tagline', 'summary',
 			'Genre', 'Writer', 'Director', 'Collection'
-		]
-		root_file = os.path.splitext(data['Media'][0]['Part'][0]['file'])[0]
+		)
+		root_file = path.splitext(data['Media'][0]['Part'][0]['file'])[0]
 
 	elif type == 'show':
-		keys = [
+		keys = (
 			'title', 'titleSort', 'originalTitle',
 			'originallyAvailableAt', 'contentRating', 'userRating',
 			'studio', 'tagline', 'summary',
 			'Genre', 'Collection'
-		]
-		root_file = os.path.join(data['Location'][0]['path'], 'series')
+		)
+		root_file = path.join(data['Location'][0]['path'], 'series')
 
 	elif type == 'season':
-		keys = [
+		keys = (
 			'title', 'summary'
-		]
+		)
 		season_output = ssn.get(f'{base_url}{data["key"]}').json()['MediaContainer']['Metadata']
-		root_file = os.path.join(os.path.dirname(season_output[0]['Media'][0]['Part'][0]['file']), 'season')
+		root_file = path.join(path.dirname(season_output[0]['Media'][0]['Part'][0]['file']), 'season')
 
 	elif type == 'episode':
-		keys = [
+		keys = (
 			'title', 'titleSort',
 			'originallyAvailableAt', 'contentRating', 'userRating',
 			'summary',
 			'Writer', 'Director'
-		]
-		root_file = os.path.splitext(data['Media'][0]['Part'][0]['file'])[0]
+		)
+		root_file = path.splitext(data['Media'][0]['Part'][0]['file'])[0]
 
 	else:
 		#unknown type of source
@@ -80,45 +76,30 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, download_ep
 	#build file paths
 	file_data = f'{root_file}_metadata.json'
 	if download_poster == True and (download_episode_posters == True or (download_episode_posters == False and media_info['type'] != 'episode')):
-		thumb_url = media_info['thumb'] if 'thumb' in media_info else None
-		art_url = media_info['art'] if 'art' in media_info else None
+		thumb_url = media_info.get('thumb', None)
+		art_url = media_info.get('art', None)
 		file_thumb = f'{root_file}_thumb.jpg'
 		file_art = f'{root_file}_art.jpg'
 
 	#extract keys
 	for key in keys:
-		result_json[key] = media_info[key] if key in media_info.keys() else None
+		result_json[key] = media_info.get(key, None)
 
 	#when original title is not in api output, it is the same as title (stupid decision of plex)
-	if 'titleSort' in result_json.keys() and result_json['titleSort'] == None:
-		result_json['titleSort'] = result_json['title']
+	result_json['titleSort'] = media_info.get('titleSort', result_json['title'])
 
 	#extract special metadata
 	if export_watched == True:
 		#get watched status of admin
-		if 'viewOffset' in media_info.keys():
-			result_json[f'_watched_admin'] = media_info['viewOffset']
-		elif 'viewCount' in media_info.keys():
-			result_json[f'_watched_admin'] = True
-		else:
-			result_json[f'_watched_admin'] = False
+		result_json[f'_watched_admin'] = media_info.get('viewOffset', 'viewCount' in media_info)
 
 		#get watched status of all other users
-		machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
-		shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers', headers={}).text
-
-		user_ids = re.findall(r'(?<=userID=")\d+(?=")', shared_users)
-		user_tokens = re.findall(r'(?<=accessToken=")\w+(?=")', shared_users)
 		for user_id, user_token in zip(user_ids, user_tokens):
 			r = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'X-Plex-Token': user_token})
 			if r.status_code != 200: continue
 			user_watched = r.json()['MediaContainer']['Metadata'][0]
-			if 'viewOffset' in user_watched.keys():
-				result_json[f'_watched_{user_id}'] = user_watched['viewOffset']
-			elif 'viewCount' in user_watched.keys():
-				result_json[f'_watched_{user_id}'] = True
-			else:
-				result_json[f'_watched_{user_id}'] = False
+			result_json[f'_watched_{user_id}'] = user_watched.get('viewOffset', 'viewCount' in media_info)
+
 	if download_poster == True and (download_episode_posters == True or (download_episode_posters == False and media_info['type'] != 'episode')):
 		if thumb_url != None:
 			thumb = ssn.get(f'{base_url}{thumb_url}').content
@@ -128,7 +109,7 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, download_ep
 	#all data is extracted, put them into files
 
 	#put data into file
-	json.dump(result_json, open(file_data, 'w+'), indent=4)
+	dump(result_json, open(file_data, 'w+'), indent=4)
 	if download_poster == True and (download_episode_posters == True or (download_episode_posters == False and media_info['type'] != 'episode')):
 		#put thumb (poster) into file
 		if thumb_url != None:
@@ -141,24 +122,25 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, download_ep
 
 	return result_json
 
-def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched: bool):
+def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched: bool, user_data: tuple):
 	result_json = {}
+	user_ids, user_tokens = user_data
 	#build paths to metadata files
 	if type == 'movie':
-		root_file = os.path.splitext(data['Media'][0]['Part'][0]['file'])[0]
+		root_file = path.splitext(data['Media'][0]['Part'][0]['file'])[0]
 		media_type = 1
 
 	elif type == 'show':
-		root_file = os.path.join(data['Location'][0]['path'], 'series')
+		root_file = path.join(data['Location'][0]['path'], 'series')
 		media_type = 2
 
 	elif type == 'season':
 		season_output = ssn.get(f'{base_url}{data["key"]}').json()['MediaContainer']['Metadata']
-		root_file = os.path.join(os.path.dirname(season_output[0]['Media'][0]['Part'][0]['file']), 'season')
+		root_file = path.join(path.dirname(season_output[0]['Media'][0]['Part'][0]['file']), 'season')
 		media_type = 3
 
 	elif type == 'episode':
-		root_file = os.path.splitext(data['Media'][0]['Part'][0]['file'])[0]
+		root_file = path.splitext(data['Media'][0]['Part'][0]['file'])[0]
 		media_type = 4
 
 	else:
@@ -169,17 +151,14 @@ def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched:
 	media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}')
 	if media_info.status_code != 200: return result_json
 	media_info = media_info.json()['MediaContainer']['Metadata'][0]
-	if import_watched == True:
-		machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
-		shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers', headers={}).text
 
 	file_data = f'{root_file}_metadata.json'
 	file_thumb = f'{root_file}_thumb.jpg'
 	file_art = f'{root_file}_art.jpg'
 
-	if os.path.isfile(file_data):
+	if path.isfile(file_data):
 		#metadata file exists for this media
-		file_data_json = json.load(open(file_data, 'r'))
+		file_data_json = load(open(file_data, 'r'))
 		payload = {
 			'type': media_type,
 			'id': rating_key,
@@ -191,17 +170,13 @@ def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched:
 		for option, value in file_data_json.items():
 			if option.startswith('_'):
 				#special metadata
-				if option.startswith('_watched_') and import_watched == True:
+				if import_watched == True and option.startswith('_watched_'):
 					#set the token of the user
 					if option == '_watched_admin':
 						user_token = plex_api_token
 					else:
-						user_id = option.split('_')[2]
-						user_token = re.search(rf'(?<=userID="{user_id}" accessToken=")\w+(?=")', shared_users)
-						if user_token:
-							user_token = user_token.group(0)
-						else:
-							continue
+						user_id = option.split('_')[-1]
+						user_token = user_tokens[user_ids.index(user_id)]
 
 					#set watched status of media for this user
 					if value == True:
@@ -216,7 +191,7 @@ def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched:
 
 			elif option in ('Genre','Writer','Director','Collection') or isinstance(value, list):
 				#list of labels
-				if value == None: value = []
+				value = value or []
 				option = option.lower()
 				#add tags
 				for offset, list_item in enumerate(value):
@@ -231,8 +206,7 @@ def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched:
 				payload[f'{option}.locked'] = 1
 			else:
 				#normal key-value pair
-				value = value or ''
-				payload[f'{option}.value'] = value
+				payload[f'{option}.value'] = value or ''
 				payload[f'{option}.locked'] = 1
 
 		#upload to plex
@@ -240,13 +214,13 @@ def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched:
 
 		result_json = file_data_json
 
-	if os.path.isfile(file_thumb):
+	if path.isfile(file_thumb):
 		#poster file exists for this media
 		with open(file_thumb, 'rb') as f:
 			data = f.read()
 		ssn.post(f'{base_url}/library/metadata/{rating_key}/posters', data=data)
 
-	if os.path.isfile(file_art):
+	if path.isfile(file_art):
 		#background file exists for this media
 		with open(file_art, 'rb') as f:
 			data = f.read()
@@ -256,17 +230,20 @@ def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched:
 
 def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, export_episode_posters: bool, export_watched: bool, lib_id: str=None, movie_name: str=None, series_name: str=None, season_number: int=None, episode_number: int=None):
 	#returning non-list is for errors
-
 	result_json = []
+
 	#preparation and checks
 	if not type in ('import','export'):
 		#type is not set to import or export
 		return 'Invalid value for "type"'
 	if all == True:
-		print('Exporting complete plex library')
-	if all == True and (lib_id != None or movie_name != None or series_name != None or season_number != None or episode_number != None):
-		#all is set to True but a target-specifier is also set
-		return 'Both "all" and a target-specifier are set'
+		if type == 'export':
+			print('Exporting complete plex library')
+		elif type == 'import':
+			print('Importing complete plex library')
+		if (lib_id, movie_name, series_name, season_number, episode_number).count(None) > 0:
+			#all is set to True but a target-specifier is also set
+			return 'Both "all" and a target-specifier are set'
 	if all == False:
 		if lib_id == None:
 			#all = False but lib_id is not given
@@ -278,8 +255,15 @@ def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, expo
 			#episode number given but no season number or no series name
 			return '"episode_number" is set but not "season_number" or "series_name"'
 
+	#get user data
+	machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
+	shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers', headers={}).text
+	user_ids = findall(r'(?<=userID=")\d+(?=")', shared_users)
+	user_tokens = findall(r'(?<=accessToken=")\w+(?=")', shared_users)
+	user_data = user_ids, user_tokens
+
 	method = _export_media if type == 'export' else _import_media
-	args = {'ssn': ssn}
+	args = {'ssn': ssn, 'user_data': user_data}
 	if type == 'export':
 		args['download_poster'] = export_posters
 		args['download_episode_posters'] = export_episode_posters
@@ -300,7 +284,8 @@ def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, expo
 			args['media_lib_id'] = lib['key']
 		lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all')
 		if lib_output.status_code != 200: continue
-		lib_output = lib_output.json()['MediaContainer']['Metadata']
+		lib_output = lib_output.json()['MediaContainer'].get('Metadata', [])
+
 		if lib['type'] == 'movie':
 			#library is movie lib; loop through every movie
 			for movie in lib_output:
@@ -402,19 +387,20 @@ def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, expo
 	return result_json
 
 if __name__ == '__main__':
-	import requests, argparse
+	from requests import Session
+	from argparse import ArgumentParser
 
 	#setup vars
-	ssn = requests.Session()
+	ssn = Session()
 	ssn.headers.update({'Accept':'application/json'})
 	ssn.params.update({'X-Plex-Token': plex_api_token})
 
 	#setup arg parsing
-	parser = argparse.ArgumentParser(description='Export Plex metadata to a file that then can be imported later')
+	parser = ArgumentParser(description='Export Plex metadata to a file that then can be imported later')
 	parser.add_argument('-t','--Type', choices=['import','export'], required=True, type=str, help='Either export metadata or import it into plex')
-	parser.add_argument('-p','--NoPosters', action='store_true', help='EXPORT ONLY: Disable exporting media posters and backgrounds')
-	parser.add_argument('-P','--NoEpisodePosters', action='store_true', help='EXPORT ONLY: Disable exporting the posters of episodes')
-	parser.add_argument('-w','--NoWatched', action='store_true', help='Disable exporting/importing watched status for every user')
+	parser.add_argument('-p','--NoPosters', action='store_false', help='EXPORT ONLY: Disable exporting media posters and backgrounds')
+	parser.add_argument('-P','--NoEpisodePosters', action='store_false', help='EXPORT ONLY: Disable exporting the posters of episodes')
+	parser.add_argument('-w','--NoWatched', action='store_false', help='Disable exporting/importing watched status for every user')
 
 	#args regarding target selection
 	parser.add_argument('-a','--All', action='store_true', help='Target every media item in every library (use with care!)')
@@ -426,20 +412,24 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	#get general info about targets, check for illegal arg parsing and call functions
-	if (args.NoPosters == True or args.NoEpisodePosters == True) and args.Type == 'import':
+	if args.Type == 'import' and False in (args.NoPosters, args.NoEpisodePosters):
 		#--NoPosters was given but the type is 'import' (--NoPosters is only for 'export')
 		parser.error('-p/--NoPosters was given but -t/--Type was set to \'import\'')
 
 	if args.All == True:
 		#user selected --All
-		plex_exporter_importer(type=args.Type, ssn=ssn, all=True, export_posters=False if args.NoPosters == True else True, export_episode_posters=False if args.NoEpisodePosters == True else True, export_watched=False if args.NoWatched == True else True)
+		if (args.LibraryName, args.MovieName, args.SeriesName, args.SeasonNumber, args.EpisodeNumber).count(None) > 0:
+			#all is set to True but a target-specifier is also set
+			parser.error('Both -a/--All and a target-specifier are set')
+
+		plex_exporter_importer(type=args.Type, ssn=ssn, all=True, export_posters=args.NoPosters, export_episode_posters=args.NoEpisodePosters, export_watched=args.NoWatched)
 	else:
 		#user is more specific
-		sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer']['Directory']
+		sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory', [])
 		for lib in sections:
 			if lib['title'] == args.LibraryName:
 				#library found
-				response = plex_exporter_importer(type=args.Type, ssn=ssn, all=False, lib_id=lib['key'], movie_name=args.MovieName, series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber, export_posters=False if args.NoPosters == True else True, export_episode_posters=False if args.NoEpisodePosters == True else True, export_watched=False if args.NoWatched == True else True)
+				response = plex_exporter_importer(type=args.Type, ssn=ssn, all=False, lib_id=lib['key'], movie_name=args.MovieName, series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber, export_posters=args.NoPosters, export_episode_posters=args.NoEpisodePosters, export_watched=args.NoWatched)
 				if not isinstance(response, list):
 					if response == 'Library ID not given (lib_id)':
 						parser.error('Neither -a/--All or -l/--LibraryName given')
