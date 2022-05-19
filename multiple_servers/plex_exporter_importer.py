@@ -6,6 +6,7 @@ The use case of this script is the following:
 	Export plex metadata to a file that then can be imported later
 Requirements (python3 -m pip install [requirement]):
 	requests
+	aiohttp
 Setup:
 	Fill the variables below firstly, then run the script.
 To-Do:
@@ -19,12 +20,15 @@ plex_api_token = ''
 from os import path, getenv
 from json import dump, load
 from re import findall
+from asyncio import run, gather
+from aiohttp import ClientSession
 
 # Environmental Variables
 plex_ip = getenv('plex_ip', plex_ip)
 plex_port = getenv('plex_port', plex_port)
 plex_api_token = getenv('plex_api_token', plex_api_token)
 base_url = f"http://{plex_ip}:{plex_port}"
+poster_queue, settings_queue = {}, {}
 
 def _export_media(type: str, data: dict, ssn, download_poster: bool, download_episode_posters: bool, export_watched: bool, user_data: tuple):
 	result_json = {}
@@ -122,6 +126,12 @@ def _export_media(type: str, data: dict, ssn, download_poster: bool, download_ep
 
 	return result_json
 
+async def _import_queue():
+	async with ClientSession() as session:
+		tasks = [session.post(u, data=d, params={'X-Plex-Token': plex_api_token}) for u, d in poster_queue.items()]
+		tasks += [session.put(u, params=d) for u, d in settings_queue.items()]
+		await gather(*tasks)
+
 def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched: bool, user_data: tuple):
 	result_json = {}
 	user_ids, user_tokens = user_data
@@ -163,7 +173,8 @@ def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched:
 			'type': media_type,
 			'id': rating_key,
 			'thumb.locked': 1,
-			'art.locked': 1
+			'art.locked': 1,
+			'X-Plex-Token': plex_api_token
 		}
 
 		#build the payload that sets all the values
@@ -210,7 +221,7 @@ def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched:
 				payload[f'{option}.locked'] = 1
 
 		#upload to plex
-		ssn.put(f'{base_url}/library/sections/{media_lib_id}/all', params=payload)
+		settings_queue[f'{base_url}/library/sections/{media_lib_id}/all'] = payload
 
 		result_json = file_data_json
 
@@ -218,13 +229,13 @@ def _import_media(type: str, data: dict, media_lib_id: str, ssn, import_watched:
 		#poster file exists for this media
 		with open(file_thumb, 'rb') as f:
 			data = f.read()
-		ssn.post(f'{base_url}/library/metadata/{rating_key}/posters', data=data)
+		poster_queue[f'{base_url}/library/metadata/{rating_key}/posters'] = data
 
 	if path.isfile(file_art):
 		#background file exists for this media
 		with open(file_art, 'rb') as f:
 			data = f.read()
-		ssn.post(f'{base_url}/library/metadata/{rating_key}/arts', data=data)
+		poster_queue[f'{base_url}/library/metadata/{rating_key}/arts'] = data
 
 	return result_json
 
@@ -383,6 +394,9 @@ def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, expo
 		if lib_id != None:
 			#the targeted library was not found
 			return 'Library not found'
+
+	if poster_queue or settings_queue:
+		run(_import_queue())
 
 	return result_json
 
