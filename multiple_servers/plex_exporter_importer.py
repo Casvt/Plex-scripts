@@ -420,6 +420,8 @@ if __name__ == '__main__':
 
 	#args regarding target selection
 	parser.add_argument('-a','--All', action='store_true', help='Target every media item in every library (use with care!)')
+	parser.add_argument('--AllMovie', action='store_true', help='Target all movie libraries')
+	parser.add_argument('--AllShows', action='store_true', help='Target all show libraries')
 	parser.add_argument('-l','--LibraryName', type=str, help='Target a specific library based on it\'s name (movie and show libraries supported)')
 	parser.add_argument('-m','--MovieName', type=str, help='Target a specific movie inside a movie library based on it\'s name (only accepted when -l is a movie library)')
 	parser.add_argument('-s','--SeriesName', type=str, help='Target a specific series inside a show library based on it\'s name (only accepted when -l is a show library)')
@@ -434,16 +436,20 @@ if __name__ == '__main__':
 
 	if args.All == True:
 		#user selected --All
-		if (args.LibraryName, args.MovieName, args.SeriesName, args.SeasonNumber, args.EpisodeNumber).count(None) > 0:
+		if (args.LibraryName, args.MovieName, args.SeriesName, args.SeasonNumber, args.EpisodeNumber, args.AllMovie, args.AllShows).count(None) > 0:
 			#all is set to True but a target-specifier is also set
 			parser.error('Both -a/--All and a target-specifier are set')
 
 		plex_exporter_importer(type=args.Type, ssn=ssn, all=True, export_posters=args.NoPosters, export_episode_posters=args.NoEpisodePosters, export_watched=args.NoWatched)
 	else:
 		#user is more specific
+		if args.LibraryName != None and any((args.AllMovie, args.AllShows)):
+			#user set library name but also library type targeter
+			parser.error('Both -l/--LibraryName and --AllMovie/--AllShows are set')
+
 		sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory', [])
 		for lib in sections:
-			if lib['title'] == args.LibraryName:
+			if lib['title'] == args.LibraryName or (args.AllMovie == True and lib['type'] == 'movie') or (args.AllShows == True and lib['type'] == 'show'):
 				#library found
 				response = plex_exporter_importer(type=args.Type, ssn=ssn, all=False, lib_id=lib['key'], movie_name=args.MovieName, series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber, export_posters=args.NoPosters, export_episode_posters=args.NoEpisodePosters, export_watched=args.NoWatched)
 				if not isinstance(response, list):
