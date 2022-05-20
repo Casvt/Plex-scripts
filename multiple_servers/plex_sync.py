@@ -178,9 +178,19 @@ class plex_sync:
 		if not target_collection_content: return
 
 		new_ratingkey = self.target_ssn.post(f'{self.target_base_url}/library/collections', params={'title': source_collection['title'], 'smart': '0', 'sectionId': target_lib['key'], 'type': content_type, 'uri': f'server://{self.target_machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(target_collection_content)}'}).json()['MediaContainer']['Metadata'][0]['ratingKey']
-		#sync settings and poster
+		#sync poster
 		if 'thumb' in source_collection:
 			tasks.append(session.post(f'{self.target_base_url}/library/collections/{new_ratingkey}/posters', params={'url': f'{self.source_base_url}{source_collection["thumb"]}?X-Plex-Token={self.source_api_token}','X-Plex-Token': self.target_api_token}))
+		#sync settings
+		payload = {
+			'type': '18',
+			'id': new_ratingkey,
+			'titleSort.value': source_collection.get('titleSort', source_collection.get('title','')),
+			'contentRating.value': source_collection.get('contentRating',''),
+			'summary.value': source_collection.get('summary',''),
+			'X-Plex-Token': self.target_api_token
+		}
+		tasks.append(session.put(f'{self.target_base_ur}/library/sections/{target_lib["key"]}/all', params=payload))
 		self.result_json += target_collection_content
 		#launch all the upload requests at the same time
 		await gather(*tasks)
@@ -423,7 +433,6 @@ class plex_sync:
 			#sync source playlists to target server
 			for playlist in source_playlists:
 				print(f'		{playlist["title"]}')
-				source_playlist_info = self.__get_data('source', f'/playlists/{playlist["ratingKey"]}', params={'X-Plex-Token': user_token[1]})['MediaContainer']['Metadata'][0]
 				source_playlist_content = self.__get_data('source',f'/playlists/{playlist["ratingKey"]}/items', params={'includeGuids': '1', 'X-Plex-Token': user_token[1]})['MediaContainer'].get('Metadata', None)
 				if source_playlist_content == None: continue
 				#make map of media: guids or title -> target ratingkey
@@ -446,10 +455,16 @@ class plex_sync:
 					self.result_json.append(entry['ratingKey'])
 				if not target_playlist_content: continue
 
-				new_ratingkey = self.target_ssn.post(f'{self.target_base_url}/playlists', params={'type': 'video', 'title': source_playlist_info['title'], 'smart': '0', 'uri': f'server://{self.target_machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(target_playlist_content)}', 'X-Plex-Token': user_token[2]}).json()['MediaContainer']['Metadata'][0]['ratingKey']
-				#sync settings and poster
-				if 'thumb' in source_playlist_info:
-					self.target_ssn.post(f'{self.target_base_url}/playlists/{new_ratingkey}/posters', params={'url': f'{self.source_base_url}{source_playlist_info["thumb"]}?X-Plex-Token={self.source_api_token}'})
+				new_ratingkey = self.target_ssn.post(f'{self.target_base_url}/playlists', params={'type': 'video', 'title': playlist['title'], 'smart': '0', 'uri': f'server://{self.target_machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(target_playlist_content)}', 'X-Plex-Token': user_token[2]}).json()['MediaContainer']['Metadata'][0]['ratingKey']
+				#sync poster
+				if 'thumb' in playlist:
+					self.target_ssn.post(f'{self.target_base_url}/playlists/{new_ratingkey}/posters', params={'url': f'{self.source_base_url}{playlist["thumb"]}?X-Plex-Token={self.source_api_token}'})
+				#sync settings
+				payload = {
+					'summary': playlist.get('summary',''),
+					'X-Plex-Token': self.target_api_token
+				}
+				self.target_ssn.put(f'{self.target_base_ur}/playlists/{new_ratingkey}', params=payload)
 
 				self.result_json += target_playlist_content
 
