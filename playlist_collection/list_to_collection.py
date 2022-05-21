@@ -3,16 +3,16 @@
 
 """
 The use case of this script is the following:
-	Give the id of a IMDb list and make a collection in plex of the movies in the list
+	Give the id of a IMDb/TVDb list and make a collection in plex of the movies in the list
 Requirements (python3 -m pip install [requirement]):
 	requests
 Setup:
 	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
 """
 
-plex_ip = ''
-plex_port = ''
-plex_api_token = ''
+plex_ip = '192.168.2.15'
+plex_port = '32400'
+plex_api_token = 'QU4cw1mLdJjBjGMudSbF'
 
 from os import getenv
 from re import findall as re_findall
@@ -27,7 +27,7 @@ def list_to_collection(ssn, source: str, list_id: str, library_name: str):
 	result_json = []
 
 	#check for illegal argument parsing
-	if not source in ('IMDb'):
+	if not source in ('IMDb','TVDb'):
 		return 'Invalid value for "source"'
 
 	#get list of source id's
@@ -36,11 +36,25 @@ def list_to_collection(ssn, source: str, list_id: str, library_name: str):
 		if r.status_code != 200:
 			return 'List not found'
 		list_content = r.text
+		print(list_title)
 		list_title = re_findall(r'(?<=<h1 class="header list-name">).*?(?=</h1>)', list_content)[0]
 		list_ids = ['imdb://' + t.split('"')[-1] for t in re_findall(r'<div class="lister-item mode-detail">\n\s+?<div.*?data-tconst="tt\d+', list_content)]
 		if not list_ids: return 'No media in list found'
-
-	print(list_title)
+	
+	elif source == 'TVDb':
+		r = ssn.get(f'https://thetvdb.com/lists/{list_id}')
+		if r.status_code != 200:
+			return 'List not found'
+		list_content = r.text
+		list_title = re_findall(r'(?<=id="series_title">\n)\s+.*', list_content)[0].strip()
+		print(list_title)
+		list_links = [l.split('"')[-1] for l in re_findall(r'<div class="col-xs-12 col-sm-3 mt-2">\n.*<a href=".*?(?=")', list_content)]
+		list_ids = []
+		for link in list_links:
+			r_sub = ssn.get(f'https://thetvdb.com{link}')
+			if r_sub.status_code != 200: continue
+			list_ids.append('tvdb://' + re_findall(r'ID</strong>\r\n\s+<span>\d+(?=</span>)', r_sub.text)[0].split('>')[-1])
+		if not list_ids: return 'No media in list found'
 
 	#find id of target library
 	sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer']['Directory']
@@ -70,6 +84,7 @@ def list_to_collection(ssn, source: str, list_id: str, library_name: str):
 				continue
 			result_json.append(media['ratingKey'])
 			break
+	if not result_json: return 'No media in the list found in the library'
 
 	#delete collection if it already exists
 	lib_collections = ssn.get(f'{base_url}/library/sections/{lib_id}/collections').json()['MediaContainer'].get('Metadata',[])
@@ -93,8 +108,8 @@ if __name__ == '__main__':
 	ssn.params.update({'X-Plex-Token': plex_api_token})
 
 	#setup arg parsing
-	parser = ArgumentParser(description='Give the id of a IMDb list and make a collection in plex of the movies in the list')
-	parser.add_argument('-s','--Source', choices=['IMDb'], help='The source of the list', required=True)
+	parser = ArgumentParser(description='Give the id of a IMDb/TVDb list and make a collection in plex of the movies in the list')
+	parser.add_argument('-s','--Source', choices=['IMDb','TVDb'], help='The source of the list', required=True)
 	parser.add_argument('-i','--Id', type=str, help='The id of the list', required=True)
 	parser.add_argument('-l','--LibraryName', type=str, help='Name of library to put collection in', required=True)
 
