@@ -10,9 +10,9 @@ Setup:
 	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
 """
 
-plex_ip = '192.168.2.15'
-plex_port = '32400'
-plex_api_token = 'QU4cw1mLdJjBjGMudSbF'
+plex_ip = ''
+plex_port = ''
+plex_api_token = ''
 
 from os import getenv
 from re import findall as re_findall
@@ -40,7 +40,7 @@ def list_to_collection(ssn, source: str, list_id: str, library_name: str):
 		list_title = re_findall(r'(?<=<h1 class="header list-name">).*?(?=</h1>)', list_content)[0]
 		list_ids = ['imdb://' + t.split('"')[-1] for t in re_findall(r'<div class="lister-item mode-detail">\n\s+?<div.*?data-tconst="tt\d+', list_content)]
 		if not list_ids: return 'No media in list found'
-	
+
 	elif source == 'TVDb':
 		r = ssn.get(f'https://thetvdb.com/lists/{list_id}')
 		if r.status_code != 200:
