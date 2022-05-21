@@ -88,7 +88,8 @@ def plex_library_sync(ssn, source_library_name: str, target_library_name: str, s
 			print(f'	{col["title"]}')
 			#get the keys of the target media to put in the collection
 			target_keys = []
-			col_content = ssn.get(f'{base_url}{col["key"]}', params={'includeGuids': '1'}).json()['MediaContainer']['Metadata']
+			col_content = ssn.get(f'{base_url}{col["key"]}', params={'includeGuids': '1'}).json()['MediaContainer'].get('Metadata',[])
+			if not col_content: continue
 			col_type = '1' if col_content[0]['type'] == 'movie' else '2'
 			for source_media in col_content:
 				media_id = source_media.get('Guid', source_media.get('title', None))
