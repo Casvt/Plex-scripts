@@ -13,9 +13,9 @@ To-Do:
 	fetch lib for every user once, make map and avoid asking individual media every time for every user
 """
 
-plex_ip = ''
-plex_port = ''
-plex_api_token = ''
+plex_ip = '192.168.2.15'
+plex_port = '32400'
+plex_api_token = 'QU4cw1mLdJjBjGMudSbF'
 
 from os import path, getenv
 from json import dump, load
@@ -407,9 +407,9 @@ def plex_exporter_importer(type: str, ssn, all: bool, export_posters: bool, expo
 					#a specific show is targeted and this one is not it, so skip
 					continue
 
-				print(f'	{show["title"]}')
 				show_output = ssn.get(f'{base_url}{show["key"]}')
-				if show_output != 200: continue
+				if show_output.status_code != 200: continue
+				print(f'	{show["title"]}')
 				show_output = show_output.json()
 				show_info = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
 				#export/import show data
