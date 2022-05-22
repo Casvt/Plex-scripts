@@ -15,7 +15,7 @@ plex_port = ''
 plex_api_token = ''
 
 from os import getenv
-from os.path import splitext
+from os.path import dirname, join
 
 # Environmental Variables
 plex_ip = getenv('plex_ip', plex_ip)
@@ -28,7 +28,7 @@ def _download_poster(ssn, media_info: dict):
 
 	if 'thumb' in media_info and 'Media' in media_info:
 		poster = ssn.get(f'{base_url}{media_info["thumb"]}').content
-		file_path = splitext(media_info['Media'][0]['Part'][0]['file'])[0] + '.jpg'
+		file_path = join(dirname(media_info['Media'][0]['Part'][0]['file']), 'poster.jpg')
 		with open(file_path, 'wb') as f:
 			f.write(poster)
 
