@@ -54,7 +54,6 @@ def plex_library_sync(ssn, source_library_name: str, target_library_name: str, s
 			media_id = media.get('Guid', media.get('title', None))
 			media_poster = media.get('thumb', None)
 			if None in (media_id, media_poster): continue
-			print(f'	{media["title"]}')
 
 			#find media in target library
 			for target_media in target_lib_output:
@@ -68,6 +67,8 @@ def plex_library_sync(ssn, source_library_name: str, target_library_name: str, s
 					break
 			else:
 				continue
+
+			print(f'        {media["title"]}')
 
 			#upload poster
 			ssn.post(f'{base_url}/library/metadata/{target_ratingkey}/posters', params={'url': f'{base_url}{media_poster}?X-Plex-Token={plex_api_token}'})
