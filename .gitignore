@@ -133,3 +133,4 @@ dmypy.json
 
 # project related
 *_DEBUG*
+.tests/
