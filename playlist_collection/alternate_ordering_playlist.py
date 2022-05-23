@@ -69,7 +69,7 @@ def alternate_ordering_playlist(ssn, series_name: str, get_orders: bool=False, o
 
 				#get all episodes of series in the order specified and note tvdb ids in order
 				show_content = ssn.get(link, params={}, headers={}).text
-				tvdb_ids = [x.split('/')[-1] for x in re.findall(r'episode-label".*?/episodes/\d+', show_content, re.DOTALL)]
+				tvdb_ids = [x.split('/')[-1] for x in re.findall(r'(?<=<a href=")/series/\S+?/episodes/\d+', show_content)]
 
 				#create a map: tvdb id -> plex rating key
 				id_map = {}
