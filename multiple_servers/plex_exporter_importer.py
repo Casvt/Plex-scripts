@@ -13,9 +13,9 @@ To-Do:
 	fetch lib for every user once, make map and avoid asking individual media every time for every user
 """
 
-plex_ip = '192.168.2.15'
-plex_port = '32400'
-plex_api_token = 'QU4cw1mLdJjBjGMudSbF'
+plex_ip = ''
+plex_port = ''
+plex_api_token = ''
 
 from os import path, getenv
 from json import dump, load
