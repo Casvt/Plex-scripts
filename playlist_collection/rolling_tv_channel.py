@@ -35,7 +35,7 @@ Setup:
 				url 1: key=%2Flibrary%2Fmetadata%2F583&context=
 				url 2: key=%2Flibrary%2Fmetadata%2F1666&context=
 				series = ["583", "1666"]
-	
+
 	Run the script at an interval (adviced to run the script every <6min)
 """
 

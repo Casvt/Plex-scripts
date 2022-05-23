@@ -65,7 +65,7 @@ def playlist_to_collection(ssn, library_name: str, playlist_name: str, remove_pl
 			if collection['title'] == playlist_name:
 				ssn.delete(f'{base_url}/library/collections/{collection["ratingKey"]}')
 				break
-	
+
 	#create new collection
 	machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
 	ssn.post(f'{base_url}/library/collections', params={'type': lib_type, 'title': playlist_name, 'smart': '0', 'sectionId': lib_id, 'uri': f'server://{machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(playlist_entries)}'})

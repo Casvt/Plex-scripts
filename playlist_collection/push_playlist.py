@@ -77,7 +77,7 @@ def push_playlist(ssn, source_user: str, target_users: list, playlist_name: str)
 	playlist_content = ssn.get(f'{base_url}/playlists/{playlist_ratingkey}/items', params={'X-Plex-Token': source_token}).json()['MediaContainer'].get('Metadata', [])
 	if not playlist_content: return 'Source playlist is empty'
 	playlist_ratingkeys = [i['ratingKey'] for i in playlist_content]
-	
+
 	for target_token in target_tokens:
 		print(target_token[0])
 		#delete old playlist if it's there

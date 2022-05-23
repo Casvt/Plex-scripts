@@ -62,7 +62,7 @@ def advanced_playlist(ssn, series_names: list, order: str, playlist_name: str):
 		#random order of all episodes
 		import random
 		random.shuffle(episodes)
-	
+
 	elif order == 'semi-shuffled':
 		#series are sequentially ordered but inside the series, the episodes are shuffled
 		import random
@@ -70,7 +70,7 @@ def advanced_playlist(ssn, series_names: list, order: str, playlist_name: str):
 		for series in series_episodes.values():
 			random.shuffle(series)
 			episodes += series
-	
+
 	elif order == 'staggered':
 		#first episode of each series is added, then the second episode of each series, etc.
 		episodes = []

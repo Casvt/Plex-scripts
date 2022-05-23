@@ -83,7 +83,7 @@ def plex_library_sync(ssn, source_library_name: str, target_library_name: str, s
 		#remove all collections on the target server
 		for col in target_collections:
 			ssn.delete(f'{base_url}/library/collections/{col["ratingKey"]}')
-		
+
 		#sync all collections
 		for col in source_collections:
 			print(f'	{col["title"]}')

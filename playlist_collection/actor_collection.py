@@ -48,13 +48,13 @@ def actor_collection(ssn, collection_name: str='Actor Collection', actors: int=5
 				#get the movies of the movie director too
 				director_movies = ssn.get(f'{base_url}/library/sections/{media["librarySectionID"]}/all', params={'type': '1',  'director': media_info['Director'][0]['id']}).json()['MediaContainer']['Metadata']
 				movie_ratingkeys += [m['ratingKey'] for m in director_movies if not m['ratingKey'] in movie_ratingkeys]
-			
+
 			#if collection with this name already exists, remove it first
 			collections = ssn.get(f'{base_url}/library/sections/{media["librarySectionID"]}/collections').json()['MediaContainer']['Metadata']
 			for collection in collections:
 				if collection['title'] == collection_name:
 					ssn.delete(f'{base_url}/library/collections/{collection["ratingKey"]}')
-			
+
 			#create collection
 			machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
 			ssn.post(f'{base_url}/library/collections', params={'type': '1', 'title': collection_name, 'smart': '0', 'sectionId': media['librarySectionID'], 'uri': f'server://{machine_id}/com.plexapp.library/library/metadata/{",".join(movie_ratingkeys)}'})

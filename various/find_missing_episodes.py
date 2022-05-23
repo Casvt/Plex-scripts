@@ -63,7 +63,7 @@ def find_missing_episodes(ssn, library_name: str, series_name: str=None, ignore_
 				if guid['id'].startswith('tvdb://'):
 					#show has tvdb id; note it
 					show_list.append([show['title'], guid['id'].split('/')[-1]])
-		
+
 		#get episodes of every show on tvdb site and find ones that aren't present in episode_list
 		for show in show_list:
 			show_info = ssn.get(f'https://thetvdb.com/dereferrer/series/{show[1]}').text

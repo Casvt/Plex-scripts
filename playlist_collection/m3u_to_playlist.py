@@ -36,7 +36,7 @@ def m3u_to_playlist(ssn, library_name: str, file_path: str):
 			break
 	else:
 		return 'Library not found'
-	return 
+	return
 
 if __name__ == '__main__':
 	import requests, argparse

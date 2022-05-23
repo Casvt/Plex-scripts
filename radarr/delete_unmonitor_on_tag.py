@@ -46,7 +46,7 @@ def delete_unmonitor_on_tag(ssn, tag_name: str, delete_file: bool, unmonitor_mov
 			print(movie['title'])
 			if delete_file == True and 'movieFile' in movie:
 				ssn.delete(f'{base_url}/movieFile/{movie["movieFile"]["id"]}')
-			
+
 			if unmonitor_movie == True:
 				movie['monitored'] = False
 				ssn.put(f'{base_url}/movie/{movie["id"]}', json=movie)

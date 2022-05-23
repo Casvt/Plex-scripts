@@ -262,7 +262,7 @@ class plex_sync:
 					target_ratingkey = self.__find_on_target(guid=season['Guid'] if 'Guid' in season else [], title=season['title'] if 'title' in season else '', type='season')
 					if target_ratingkey == None: continue
 					self.map[str(key)] = target_ratingkey['ratingKey']
-				
+
 				tasks.append(session.post(f'{self.target_base_url}/library/metadata/{self.map[str(key)]}/posters', params={'url': f'{self.source_base_url}{season["thumb"]}?X-Plex-Token={self.source_api_token}','X-Plex-Token': self.target_api_token}))
 
 		#if said so, skip syncing episode posters

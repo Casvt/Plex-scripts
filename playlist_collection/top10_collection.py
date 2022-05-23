@@ -48,12 +48,12 @@ def top10_collection(ssn, library_name: str, collection_title: str):
 						collection_id = collection['ratingKey']
 						ssn.delete(f'{plex_base_url}/library/collections/{collection_id}')
 						break
-			
+
 			#get new list of top movies
 			movies = requests.get(f'{tautulli_base_url}', params={'apikey': tautulli_api_token, 'cmd': 'get_home_stats', 'stat_id': 'top_movies'}).json()['response']['data']['rows']
 			movie_ratingkeys = [str(movie['rating_key']) for movie in movies]
 			result_json = movie_ratingkeys
-			
+
 			#create new collection
 			machine_id = ssn.get(f'{plex_base_url}/').json()['MediaContainer']['machineIdentifier']
 			ssn.post(f'{plex_base_url}/library/collections', params={'type': 1, 'title': collection_title, 'smart': 0, 'sectionId': lib['key'], 'uri': f'server://{machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(movie_ratingkeys)}'})

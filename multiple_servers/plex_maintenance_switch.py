@@ -75,7 +75,7 @@ def plex_maintenance_switch(ssn, plex, set_state: str='on'):
 					result_json.append(session)
 				except plexapi_notfound:
 					continue
-			
+
 			#remove old file
 			os.remove(file_name)
 
