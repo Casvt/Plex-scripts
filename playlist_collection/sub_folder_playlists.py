@@ -86,4 +86,3 @@ if __name__ == '__main__':
 	response = sub_folder_playlists(ssn=ssn, library_folder=args.LibraryFolder)
 	if not isinstance(response, list):
 		parser.error(response)
-

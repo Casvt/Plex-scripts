@@ -48,7 +48,7 @@ sonarr_api_token = getenv('sonarr_api_token', sonarr_api_token)
 radarr_ip = getenv('radarr_ip', radarr_ip)
 radarr_port = getenv('radarr_port', radarr_port)
 radarr_api_token = getenv('radarr_api_token', radarr_api_token)
-	
+
 def root_folder_tagger(source: str):
 	result_json = []
 

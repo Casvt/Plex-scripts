@@ -70,4 +70,3 @@ if __name__ == '__main__':
 		print(dumps(response, indent=4))
 	else:
 		parser.error(response)
-
