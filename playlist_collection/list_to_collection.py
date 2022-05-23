@@ -59,7 +59,7 @@ def list_to_collection(ssn, source: str, list_id: str, library_name: str):
 	elif source == 'TMDb':
 		r = ssn.get(f'https://www.themoviedb.org/collection/{list_id}')
 		if r.status_code != 200:
-			return 'List not found' list_content = r.text
+			return 'List not found'
 		list_content = r.text
 		list_title = re_findall(r'(?<=<meta property="og:title" content=").*?(?=")', list_content)[0]
 		print(list_title)
