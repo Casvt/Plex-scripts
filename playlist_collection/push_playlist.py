@@ -103,7 +103,7 @@ if __name__ == '__main__':
 	ssn.params.update({'X-Plex-Token': plex_api_token})
 
 	#setup arg parsing
-	parser = argparse.ArgumentParser(description='Set the first image of an album as the album cover')
+	parser = argparse.ArgumentParser(description='Sync a playlist from one user to the other')
 	parser.add_argument('-s','--SourceUser', type=str, help='Username of the source user; @me to target yourself', required=True)
 	parser.add_argument('-p','--PlaylistName', type=str, help='The name of the playlist to push', required=True)
 	parser.add_argument('-t','--TargetUser', type=str, help='Username of the target user; @me to target yourself; @all to target everyone; give multiple times to target multiple users', action='append', required=True)
