@@ -26,7 +26,7 @@ plex_api_token = getenv('plex_api_token', plex_api_token)
 base_url = f"http://{plex_ip}:{plex_port}"
 latest_episodes = {}
 
-def _process_media(ssn, rating_key: str, days_old: int=None, days_added: int=None, recent_episodes: int=None, view_count: int=None):
+def _process_media(ssn, rating_key: str, days_old: int=None, days_added: int=None, recent_episodes: int=None, view_count: int=None, view_count_up: int=None):
 	media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}').json()['MediaContainer']['Metadata'][0]
 	if days_old and 'lastViewedAt' in media_info and media_info['lastViewedAt'] < time() - (days_old * 86400):
 		ssn.delete(f'{base_url}/library/metadata/{rating_key}')
@@ -37,6 +37,9 @@ def _process_media(ssn, rating_key: str, days_old: int=None, days_added: int=Non
 	if view_count and 'viewCount' in media_info and media_info['viewCount'] >= view_count:
 		ssn.delete(f'{base_url}/library/metadata/{rating_key}')
 		return f'Removed: Watched {view_count} or more times'
+	if view_count_up and 'viewCount' in media_info and media_info['viewCount'] <= view_count_up:
+		ssn.delete(f'{base_url}/library/metadata/{rating_key}')
+		return f'Removed: Watched {view_count_up} or less times'
 	if recent_episodes:
 		if media_info['type'] != 'episode':
 			return f'Invalid media type for recent_episodes: {media_info["type"]}'
@@ -50,7 +53,7 @@ def _process_media(ssn, rating_key: str, days_old: int=None, days_added: int=Non
 			return f'Removed: Not one of the {view_count} latest episodes of the series'
 	return
 
-def recent_episode_maintainer(ssn, library_name: str, movie_name: list=[], series_name: str=None, season_number: int=None, episode_number: int=None, days_old: int=None, days_added: int=None, recent_episodes: int=None, view_count: int=None):
+def recent_episode_maintainer(ssn, library_name: str, movie_name: list=[], series_name: str=None, season_number: int=None, episode_number: int=None, days_old: int=None, days_added: int=None, recent_episodes: int=None, view_count: int=None, view_count_up: int=None):
 	result_json = []
 
 	#check for illegal arg parsing
@@ -60,7 +63,7 @@ def recent_episode_maintainer(ssn, library_name: str, movie_name: list=[], serie
 	if episode_number != None and (season_number == None or series_name == None):
 		#episode number given but no season number or no series name
 		return '"episode_number" is set but not "season_number" or "series_name"'
-	if days_old == None and days_added == None and recent_episodes == None and view_count == None:
+	if days_old == None and days_added == None and recent_episodes == None and view_count == None and view_count_up == None:
 		#no rules given
 		return 'No rules given'
 
@@ -68,7 +71,8 @@ def recent_episode_maintainer(ssn, library_name: str, movie_name: list=[], serie
 		'days_old': days_old,
 		'days_added': days_added,
 		'recent_episodes': recent_episodes,
-		'view_count': view_count
+		'view_count': view_count,
+		'view_count_up': view_count_up
 	}
 	sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer']['Directory']
 	#loop through the libraries
@@ -171,10 +175,11 @@ if __name__ == '__main__':
 	parser.add_argument('-a', '--DaysAdded', type=int, help="Remove media added later than x days ago")
 	parser.add_argument('-r', '--RecentEpisodes', type=int, help="Only keep the latest x episodes of a series")
 	parser.add_argument('-c', '--ViewCount', type=int, help="Only keep media that has been watched x or less times")
+	parser.add_argument('-C', '--ViewCountUp', type=int, help="Only keep media that has been watched x or more times")
 
 	args = parser.parse_args()
 	#call function and process result
-	response = recent_episode_maintainer(ssn=ssn, library_name=args.LibraryName, movie_name=args.MovieName, series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber, days_old=args.DaysOld, days_added=args.DaysAdded, recent_episodes=args.RecentEpisodes, view_count=args.ViewCount)
+	response = recent_episode_maintainer(ssn=ssn, library_name=args.LibraryName, movie_name=args.MovieName, series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber, days_old=args.DaysOld, days_added=args.DaysAdded, recent_episodes=args.RecentEpisodes, view_count=args.ViewCount, view_count_up=args.ViewCountUp)
 	if not isinstance(response, list):
 		if response == '"season_number" is set but not "series_name"':
 			parser.error('-S/--SeasonNumber given but not -s/--SeriesName given')
