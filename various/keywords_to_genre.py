@@ -23,7 +23,7 @@ plex_port = getenv('plex_port', plex_port)
 plex_api_token = getenv('plex_api_token', plex_api_token)
 base_url = f"http://{plex_ip}:{plex_port}"
 
-def keywords_to_genre(ssn, keywords: list, library_name: str, movie_names: list=[], series_names: list=[]):
+def keywords_to_genre(ssn, keywords: list, library_name: str, movie_names: list=[], series_names: list=[], skip_locked: bool=False):
 	result_json = []
 
 	#find library
@@ -48,6 +48,11 @@ def keywords_to_genre(ssn, keywords: list, library_name: str, movie_names: list=
 		if movie_names and not media['title'] in movie_names: continue
 		if series_names and not media['title'] in series_names: continue
 
+		media_output = ssn.get(f'{base_url}/library/metadata/{media["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
+		#skip if genre field is locked and skip_locked is True
+		if skip_locked == True and [l for l in media_output.get('Field', []) if l['name'] == 'genre' and l['locked'] == True]:
+			continue
+
 		#find imdb id of media otherwise skip
 		guids = media.get('Guid', [])
 		for guid in guids:
@@ -58,7 +63,6 @@ def keywords_to_genre(ssn, keywords: list, library_name: str, movie_names: list=
 			continue
 
 		#get all genres that media has been tagged with
-		media_output = ssn.get(f'{base_url}/library/metadata/{media["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
 		media_genres = {}
 		for i, g in enumerate(media_output.get('Genre', [])): media_genres[str(i)] = g['tag']
 
@@ -97,10 +101,11 @@ if __name__ == '__main__':
 	parser.add_argument('-l','--LibraryName', type=str, help='Name of target library', required=True)
 	parser.add_argument('-m','--MovieName', type=str, help='Name of target movie; allowed to give multiple times (requires -l to be a movie library)', action='append', default=[])
 	parser.add_argument('-s','--SeriesName', type=str, help='Name of target series; allowed to give multiple times (requires -l to be a show library)', action='append', default=[])
+	parser.add_argument('-S','--SkipLocked', help='Skip media that has it\'s genre field locked', action='store_true')
 
 	args = parser.parse_args()
 	#call function and process result
-	response = keywords_to_genre(ssn=ssn, keywords=args.Keyword, library_name=args.LibraryName, movie_names=args.MovieName, series_names=args.SeriesName)
+	response = keywords_to_genre(ssn=ssn, keywords=args.Keyword, library_name=args.LibraryName, movie_names=args.MovieName, series_names=args.SeriesName, skip_locked=args.SkipLocked)
 	if not isinstance(response, list):
 		if response == 'Library is a movie library but "series_names" is set':
 			parser.error('Library is a movie library but -s/--SeriesName is set')
