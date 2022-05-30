@@ -15,8 +15,8 @@ plex_port = ''
 plex_api_token = ''
 
 from os import getenv
-from re import findall as re_findall
 from html import unescape
+import re
 
 # Environmental Variables
 plex_ip = getenv('plex_ip', plex_ip)
@@ -67,14 +67,13 @@ def find_missing_episodes(ssn, library_name: str, series_name: str=None, ignore_
 		#get episodes of every show on tvdb site and find ones that aren't present in episode_list
 		for show in show_list:
 			show_info = ssn.get(f'https://thetvdb.com/dereferrer/series/{show[1]}').text
-			episode_link = re_findall(r'(?<=<a href=").*?(?=">All Seasons)', show_info)[0]
+			episode_link = str(re.search(r'<ul class="list-group list-group-condensed mb-1">.*?<a href=".*?(?=">)', show_info, re.DOTALL).group(0)).split('"')[-1]
 			show_content = ssn.get(f'https://thetvdb.com{episode_link}').text
-			show_ids = [i.split('/')[-1] for i in re_findall(r'<h4 class="list-group-item-heading">(?:.*\n){2}.*?(?=">)', show_content)]
-			show_numbers = [n.split('>')[-1].split(' ')[-1].replace('0x','S0E') for n in re_findall(r'<h4 class="list-group-item-heading">(?:.*\n).*?>.*?(?=<)', show_content)]
-			show_titles = [unescape(i.split('\n')[-1].strip()) for i in re_findall(r'<h4 class="list-group-item-heading">(?:.*\n){2}.*?">\n.*', show_content)]
-			show_episodes = list(zip(show_ids, show_numbers, show_titles))
-			for episode in show_episodes:
-				if 'S0E' in episode[1]: continue
+			show_ids = [i.split('/')[-1] for i in re.findall(r'<h4 class="list-group-item-heading">(?:.*\n){2}.*?(?=">)', show_content)]
+			show_numbers = [n.split('>')[-1].split(' ')[-1].replace('0x','S0E') for n in re.findall(r'<h4 class="list-group-item-heading">(?:.*\n).*?>.*?(?=<)', show_content)]
+			show_titles = [unescape(i.split('\n')[-1].strip()) for i in re.findall(r'<h4 class="list-group-item-heading">(?:.*\n){2}.*?">\n.*', show_content)]
+			for episode in zip(show_ids, show_numbers, show_titles):
+				if ignore_specials == True and 'S0E' in episode[1]: continue
 				if not episode[0] in episode_list:
 					print(f'	{show[0]} - {episode[1]} - {episode[2]}')
 		break
