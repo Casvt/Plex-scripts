@@ -80,6 +80,31 @@ def _export_media(
 		)
 		root_file = path.splitext(data['Media'][0]['Part'][0]['file'])[0]
 
+	elif type == 'artist':
+		keys = (
+			'title', 'titleSort', 'summary',
+			'Genre', 'Style', 'Mood', 'Country', 'Collection', 'Similar'
+		)
+		root_file = path.join(data['Location'][0]['path'], 'artist')
+
+	elif type == 'album':
+		keys = (
+			'title', 'titleSort',
+			'originallyAvailableAt', 'contentRating', 'userRating',
+			'studio','summary',
+			'Genre', 'Style', 'Mood', 'Collection'
+		)
+		album_output = ssn.get(f'{base_url}{data["key"]}').json()['MediaContainer']['Metadata']
+		root_file = path.join(path.dirname(album_output[0]['Media'][0]['Part'][0]['file']), 'album')
+
+	elif type == 'track':
+		keys = (
+			'title', 'originalTitle',
+			'contentRating', 'userRating', 'index', 'parentIndex',
+			'Mood'
+		)
+		root_file = path.splitext(data['Media'][0]['Part'][0]['file'])[0]
+
 	else:
 		#unknown type of source
 		return 'Unknown source type when trying to extract data (internal error)'
@@ -93,10 +118,10 @@ def _export_media(
 	file_data = f'{root_file}_metadata.json'
 	thumb_url = media_info.get('thumb', None)
 	art_url = media_info.get('art', None)
-	if thumb_url != None and ((type != 'episode' and export_poster == True) or (type == 'episode' and export_episode_poster == True)):
+	if thumb_url != None and ((not type in ('episode','track') and export_poster == True) or (type == 'episode' and export_episode_poster == True)):
 		file_thumb = f'{root_file}_thumb.jpg'
 		poster_queue[f'{base_url}{thumb_url}'] = file_thumb
-	if art_url != None and ((type != 'episode' and export_art == True) or (type == 'episode' and export_episode_art == True)):
+	if art_url != None and ((not type in ('episode','track') and export_art == True) or (type == 'episode' and export_episode_art == True)):
 		file_art = f'{root_file}_art.jpg'
 		poster_queue[f'{base_url}{art_url}'] = file_art
 
@@ -105,11 +130,12 @@ def _export_media(
 		for key in keys:
 			result_json[key] = media_info.get(key, None)
 
-		#when original title is not in api output, it is the same as title (stupid decision of plex)
-		result_json['titleSort'] = media_info.get('titleSort', result_json['title'])
+		if type != 'track':
+			#when original title is not in api output, it is the same as title (stupid decision of plex)
+			result_json['titleSort'] = media_info.get('titleSort', result_json['title'])
 
 	#extract special metadata
-	if export_watched == True:
+	if export_watched == True and type in ('movie','episode'):
 		#get watched status of admin
 		result_json[f'_watched_admin'] = media_info.get('viewOffset', 'viewCount' in media_info)
 
@@ -121,7 +147,7 @@ def _export_media(
 			result_json[f'_watched_{user_id}'] = user_watched.get('viewOffset', 'viewCount' in user_watched)
 
 	#put data into file
-	if export_metadata == True or export_watched == True:
+	if export_metadata == True or (export_watched == True and type in ('movie','episode')):
 		dump(result_json, open(file_data, 'w+'), indent=4)
 
 	return result_json, poster_queue, settings_queue, reset_queue
@@ -129,7 +155,7 @@ def _export_media(
 async def _import_queue(poster_queue, settings_queue):
 	async with ClientSession() as session:
 		tasks = [session.post(u, data=d, params={'X-Plex-Token': plex_api_token}) for u, d in poster_queue.items()]
-		tasks += [session.put(u, params=d) for u, d in settings_queue.items()]
+		tasks += [session.put(x[0], params=x[1]) for x in settings_queue]
 		await gather(*tasks)
 
 def _import_media(
@@ -156,6 +182,19 @@ def _import_media(
 		root_file = path.splitext(data['Media'][0]['Part'][0]['file'])[0]
 		media_type = 4
 
+	elif type == 'artist':
+		root_file = path.join(data['Location'][0]['path'], 'artist')
+		media_type = 8
+
+	elif type == 'album':
+		album_output = ssn.get(f'{base_url}{data["key"]}').json()['MediaContainer']['Metadata']
+		root_file = path.join(path.dirname(album_output[0]['Media'][0]['Part'][0]['file']), 'album')
+		media_type = 9
+
+	elif type == 'track':
+		root_file = path.splitext(data['Media'][0]['Part'][0]['file'])[0]
+		media_type = 10
+
 	else:
 		#unknown type of source
 		return 'Unknown source type when trying to import data (internal error)'
@@ -180,6 +219,8 @@ def _import_media(
 			'art.locked': 1,
 			'X-Plex-Token': plex_api_token
 		}
+		if type == 'album':
+			payload['artist.id.value'] = data['parentRatingKey']
 
 		#build the payload that sets all the values
 		for option, value in file_data_json.items():
@@ -204,7 +245,7 @@ def _import_media(
 						#set media to offset (partially watched; on deck)
 						ssn.get(f'{base_url}/:/progress', params={'identifier': 'com.plexapp.plugins.library', 'key': rating_key, 'time': value, 'state': 'stopped', 'X-Plex-Token': user_token})
 
-			elif option in ('Genre','Writer','Director','Collection') or isinstance(value, list):
+			elif option in ('Genre','Writer','Director','Collection','Style', 'Mood', 'Country', 'Similar') or isinstance(value, list):
 				#list of labels
 				value = value or []
 				option = option.lower()
@@ -225,17 +266,17 @@ def _import_media(
 				payload[f'{option}.locked'] = 1
 
 		#upload to plex
-		settings_queue[f'{base_url}/library/sections/{media_lib_id}/all'] = payload
+		settings_queue.append([f'{base_url}/library/sections/{media_lib_id}/all',payload])
 
 		result_json = file_data_json
 
-	if path.isfile(file_thumb) and ((type != 'episode' and import_poster == True) or (type == 'episode' and import_episode_poster == True)):
+	if path.isfile(file_thumb) and ((not type == 'episode' and import_poster == True) or (type == 'episode' and import_episode_poster == True)):
 		#poster file exists for this media
 		with open(file_thumb, 'rb') as f:
 			data = f.read()
 		poster_queue[f'{base_url}/library/metadata/{rating_key}/posters'] = data
 
-	if path.isfile(file_art) and ((type != 'episode' and import_art == True) or (type == 'episode' and import_episode_art == True)):
+	if path.isfile(file_art) and ((not type == 'episode' and import_art == True) or (type == 'episode' and import_episode_art == True)):
 		#background file exists for this media
 		with open(file_art, 'rb') as f:
 			data = f.read()
@@ -250,28 +291,11 @@ async def _reset_queue(reset_queue):
 
 def _reset_media(
 		type: str, data: dict, media_lib_id: str, poster_queue: dict, settings_queue: dict, reset_queue: dict,
-		reset_poster: bool=True, reset_art: bool=True
+		reset_poster: bool=True, reset_art: bool=True, reset_metadata: bool=True
 	):
 	result_json = {}
 
-	#get media type
-	if type == 'movie':
-		media_type = 1
-
-	elif type == 'show':
-		media_type = 2
-
-	elif type == 'season':
-		media_type = 3
-
-	elif type == 'episode':
-		media_type = 4
-
-	else:
-		#unknown type of source
-		return 'Unknown source type when trying to reset data (internal error)'
-
-	#reset different data based on the type
+	#get media type and define fields to unlock
 	if type == 'movie':
 		keys = (
 			'title', 'titleSort', 'originalTitle',
@@ -279,6 +303,7 @@ def _reset_media(
 			'studio', 'tagline', 'summary',
 			'Genre', 'Writer', 'Director', 'Collection'
 		)
+		media_type = 1
 
 	elif type == 'show':
 		keys = (
@@ -287,11 +312,13 @@ def _reset_media(
 			'studio', 'tagline', 'summary',
 			'Genre', 'Collection'
 		)
+		media_type = 2
 
 	elif type == 'season':
 		keys = (
 			'title', 'summary'
 		)
+		media_type = 3
 
 	elif type == 'episode':
 		keys = (
@@ -300,10 +327,35 @@ def _reset_media(
 			'summary',
 			'Writer', 'Director'
 		)
+		media_type = 4
+
+	elif type == 'artist':
+		keys = (
+			'title', 'titleSort', 'summary',
+			'Genre', 'Style', 'Mood', 'Country', 'Collection', 'Similar'
+		)
+		media_type = 8
+
+	elif type == 'album':
+		keys = (
+			'title', 'titleSort',
+			'originallyAvailableAt', 'contentRating', 'userRating',
+			'studio','summary',
+			'Genre', 'Style', 'Mood', 'Collection'
+		)
+		media_type = 9
+
+	elif type == 'track':
+		keys = (
+			'title', 'originalTitle',
+			'contentRating', 'userRating', 'index', 'parentIndex',
+			'Mood'
+		)
+		media_type = 10
 
 	else:
 		#unknown type of source
-		return 'Unknown source type when trying to extract data (internal error)'
+		return 'Unknown source type when trying to reset data (internal error)'
 
 	#set all data to unlocked (then, upon metadata refresh, it will all be put back as it was before the import)
 	rating_key = data['ratingKey']
@@ -316,11 +368,12 @@ def _reset_media(
 		payload['thumb.locked'] = 0
 	if reset_art == True:
 		payload['art.locked'] = 0
-	for key in keys:
-		if key in ('Genre','Writer','Director','Collection'):
-			payload[f'{key.lower()}.locked'] = 0
-		else:
-			payload[f'{key}.locked'] = 0
+	if reset_metadata == True:
+		for key in keys:
+			if key in ('Genre','Writer','Director','Collection','Style', 'Mood', 'Country', 'Similar'):
+				payload[f'{key.lower()}.locked'] = 0
+			else:
+				payload[f'{key}.locked'] = 0
 	result_json = payload
 
 	reset_queue += [[f'{base_url}/library/sections/{media_lib_id}/all', payload]]
@@ -328,12 +381,12 @@ def _reset_media(
 	return result_json, poster_queue, settings_queue, reset_queue
 
 def plex_exporter_importer(
-		type: str, ssn, process: list, all: bool, reset_posters: bool=True, reset_art: bool=True,
-		lib_id: str=None, movie_name: str=None, series_name: str=None, season_number: int=None, episode_number: int=None
+		type: str, ssn, process: list, all: bool,
+		lib_id: str=None, movie_name: str=None, series_name: str=None, season_number: int=None, episode_number: int=None, artist_name: str=None, album_name: str=None, track_name: str=None
 	):
 	#returning non-list is for errors
 	result_json = []
-	poster_queue, settings_queue, reset_queue = {}, {}, []
+	poster_queue, settings_queue, reset_queue = {}, [], []
 
 	#preparation and checks
 	if not type in ('import','export','reset'):
@@ -344,7 +397,7 @@ def plex_exporter_importer(
 			print('Exporting complete plex library')
 		elif type == 'import':
 			print('Importing complete plex library')
-		if (lib_id, movie_name, series_name, season_number, episode_number).count(None) > 0:
+		if (lib_id, movie_name, series_name, season_number, episode_number, artist_name, album_name, track_name).count(None) > 0:
 			#all is set to True but a target-specifier is also set
 			return 'Both "all" and a target-specifier are set'
 	if all == False:
@@ -357,6 +410,12 @@ def plex_exporter_importer(
 		if episode_number != None and (season_number == None or series_name == None):
 			#episode number given but no season number or no series name
 			return '"episode_number" is set but not "season_number" or "series_name"'
+		if album_name != None and artist_name == None:
+			#album name given but no artist name
+			return '"album_name" is set but not "artist_name"'
+		if track_name != None and (album_name == None or artist_name == None):
+			#track name given but no album name or artist name
+			return '"track_name" is set but not "album_name" or "artist_name"'
 
 	#get user data
 	machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
@@ -387,8 +446,9 @@ def plex_exporter_importer(
 		args['import_watched'] = 'watched_status' in process
 		args['import_metadata'] = 'metadata' in process
 	elif type == 'reset':
-		args['reset_poster'] = reset_posters
-		args['reset_art'] = reset_art
+		args['reset_poster'] = 'poster' in process
+		args['reset_art'] = 'art' in process
+		args['reset_metadata'] = 'metadata' in process
 		#reset doesn't need a few of the standard arguments
 		args.pop('ssn')
 		args.pop('user_data')
@@ -442,7 +502,7 @@ def plex_exporter_importer(
 				if isinstance(result, str): return result
 				if result: result_json.append(result)
 
-				#loop through seasons of show; for season exporting
+				#loop through seasons of show; for season exporting/importing
 				for season in show_output['MediaContainer']['Metadata']:
 					if season_number != None and season['index'] != season_number:
 						#a specific season is targeted and this one is not it, so skip
@@ -461,7 +521,7 @@ def plex_exporter_importer(
 						#the targeted season was not found
 						return 'Season not found'
 
-				#loop through episodes of show; for episode exporting
+				#loop through episodes of show; for episode exporting/importing
 				show_content = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}/allLeaves').json()['MediaContainer']['Metadata']
 				for episode in show_content:
 					if season_number != None and episode['parentIndex'] != season_number:
@@ -494,6 +554,76 @@ def plex_exporter_importer(
 					#the targeted series was not found
 					return 'Series not found'
 
+		elif lib['type'] == 'artist':
+			#library is music lib; loop through every artist
+			for artist in lib_output:
+				if artist_name != None and artist['title'] != artist_name:
+					#a specific artist is targeted and this one is not it, so skip
+					continue
+
+				artist_output = ssn.get(f'{base_url}{artist["key"]}')
+				if artist_output.status_code != 200: continue
+				print(f'	{artist["title"]}')
+				artist_output = artist_output.json()
+				artist_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
+				#export/import artist data
+				result, poster_queue, settings_queue, reset_queue = method(type='artist', data=artist_info, **args)
+				if isinstance(result, str): return result
+				if result: result_json.append(result)
+
+				#loop through albums of artist; for album exporting/importing
+				for album in artist_output['MediaContainer']['Metadata']:
+					if album_name != None and album['title'] != album_name:
+						#a specific album is targeted and this one is not it, so skip
+						continue
+
+					#export/import album data
+					result, poster_queue, settings_queue, reset_queue = method(type='album', data=album, **args)
+					if isinstance(result, str): return result
+					if result: result_json.append(result)
+
+					if album_name != None:
+						#the targeted album was found and processed so exit loop
+						break
+				else:
+					if album_name != None:
+						#the targeted album was not found
+						return 'Album not found'
+
+				#loop through tracks of artist; for track exporting/importing
+				artist_content = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}/allLeaves').json()['MediaContainer']['Metadata']
+				# artist_content.sort(key=lambda d: d["parentIndex"])
+				for track in artist_content:
+					if album_name != None and track['parentTitle'] != album_name:
+						#a specific album is targeted and this one is not it; so skip
+						continue
+
+					if track_name != None and track['title'] != track_name:
+						#this album is targeted but this track is not; so skip
+						continue
+
+					print(f'		{track["parentTitle"]} - D{track["parentIndex"]}T{track["index"]}	- {track["title"]}')
+					#export/import track data
+					result, poster_queue, settings_queue, reset_queue = method(type='track', data=track, **args)
+					if isinstance(result, str): return result
+					if result: result_json.append(result)
+
+					if track_name != None:
+						#the targeted track was found and processed so exit loop
+						break
+				else:
+					if track_name != None:
+						#the targeted track was not found
+						return 'Track not found'
+
+				if artist_name != None:
+					#the targeted artist was found and processed so exit loop
+					break
+			else:
+				if artist_name != None:
+					#the targeted artist was not found
+					return 'Artist not found'
+
 		else:
 			#library not supported
 			print('	Library not supported')
@@ -507,7 +637,7 @@ def plex_exporter_importer(
 			return 'Library not found'
 
 	if poster_queue or settings_queue or reset_queue:
-		if type  == 'import':
+		if type == 'import':
 			run(_import_queue(poster_queue=poster_queue, settings_queue=settings_queue))
 			poster_queue, settings_queue = {}, {}
 		elif type == 'export':
@@ -532,47 +662,49 @@ if __name__ == '__main__':
 	parser = ArgumentParser(description='Export plex metadata to a file that can then be imported back later')
 	parser.add_argument('-t','--Type', choices=['import','export','reset'], required=True, type=str, help='Either export or import metadata into plex or reset import (unlock all fields)')
 	parser.add_argument('-p','--Process', choices=['metadata','watched_status','poster','episode_poster','art','episode_art'], help='EXPORT/IMPORT ONLY: Select what to export/import; this argument can be given multiple times to select multiple things', action='append', required=True)
-	parser.add_argument('-n','--NoPosterReset', action='store_false', help='RESET ONLY: Don\'t reset the posters')
-	parser.add_argument('-N','--NoArtReset', action='store_false', help='RESET ONLY: Don\'t reset the art')
 
 	#args regarding target selection
+	#general selectors
 	parser.add_argument('-a','--All', action='store_true', help='Target every media item in every library (use with care!)')
 	parser.add_argument('--AllMovie', action='store_true', help='Target all movie libraries')
 	parser.add_argument('--AllShows', action='store_true', help='Target all show libraries')
+	parser.add_argument('--AllMusic', action='store_true', help='Target all music libraries')
 	parser.add_argument('-l','--LibraryName', type=str, help='Target a specific library based on it\'s name (movie and show libraries supported)')
+	#movie selectors
 	parser.add_argument('-m','--MovieName', type=str, help='Target a specific movie inside a movie library based on it\'s name (only accepted when -l is a movie library)')
+	#show selectors
 	parser.add_argument('-s','--SeriesName', type=str, help='Target a specific series inside a show library based on it\'s name (only accepted when -l is a show library)')
 	parser.add_argument('-S','--SeasonNumber', type=int, help='Target a specific season inside the targeted series based on it\'s number (only accepted when -s is given) (specials is 0)')
 	parser.add_argument('-e','--EpisodeNumber', type=int, help='Target a specific episode inside the targeted season based on it\'s number (only accepted when -S is given)')
+	#music selectors
+	parser.add_argument('-A','--ArtistName', type=str, help='Target a specific artist inside a music library based on it\'s name (only accepted when -l is a music library)')
+	parser.add_argument('-d','--AlbumName', type=str, help='Target a specific album inside the targeted artist based on it\'s name (only accepted when -A is given)')
+	parser.add_argument('-T','--TrackName', type=str, help='Target a specific track inside the targeted album based on it\'s name (only accepted when -d is given)')
 
 	args = parser.parse_args()
 	#get general info about targets, check for illegal arg parsing and call functions
-	if args.Type == 'import' and False in (args.NoPosters, args.NoEpisodePosters):
-		#--NoPosters was given but the type is 'import' (--NoPosters is only for 'export')
-		parser.error('-p/--NoPosters was given but -t/--Type was set to \'import\'')
-
 	if args.All == True:
 		#user selected --All
-		if (args.LibraryName, args.MovieName, args.SeriesName, args.SeasonNumber, args.EpisodeNumber, args.AllMovie, args.AllShows).count(None) > 0:
+		if (args.LibraryName, args.MovieName, args.SeriesName, args.SeasonNumber, args.EpisodeNumber, args.ArtistName, args.AlbumName, args.TrackName, args.AllMovie, args.AllShows, args.AllMusic).count(None) > 0:
 			#all is set to True but a target-specifier is also set
 			parser.error('Both -a/--All and a target-specifier are set')
 
-		response = plex_exporter_importer(type=args.Type, ssn=ssn, all=True, process=args.Process, reset_posters=args.NoPosterReset, reset_art=args.NoArtReset)
+		response = plex_exporter_importer(type=args.Type, ssn=ssn, all=True, process=args.Process)
 		if not isinstance(response, list):
 			parser.error(response)
 	else:
 		#user is more specific
-		if args.LibraryName != None and any((args.AllMovie, args.AllShows)):
+		if args.LibraryName != None and True in (args.AllMovie, args.AllShows, args.AllMusic):
 			#user set library name but also library type targeter
-			parser.error('Both -l/--LibraryName and --AllMovie/--AllShows are set')
+			parser.error('Both -l/--LibraryName and --AllMovie/--AllShows/--AllMusic are set')
 
 		sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory', [])
 		for lib in sections:
-			if lib['title'] == args.LibraryName or (args.AllMovie == True and lib['type'] == 'movie') or (args.AllShows == True and lib['type'] == 'show'):
+			if lib['title'] == args.LibraryName or (args.AllMovie == True and lib['type'] == 'movie') or (args.AllShows == True and lib['type'] == 'show') or (args.AllMusic == True and lib['type'] == 'artist'):
 				#library found
 				response = plex_exporter_importer(
-					type=args.Type, ssn=ssn, process=args.Process, reset_posters=args.NoPosterReset, reset_art=args.NoArtReset,
-					all=False, lib_id=lib['key'], movie_name=args.MovieName, series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber
+					type=args.Type, ssn=ssn, process=args.Process,
+					all=False, lib_id=lib['key'], movie_name=args.MovieName, series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber, artist_name=args.ArtistName, album_name=args.AlbumName, track_name=args.TrackName
 				)
 				if not isinstance(response, list):
 					if response == 'Library ID not given (lib_id)':
