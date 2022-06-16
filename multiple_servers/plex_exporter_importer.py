@@ -9,8 +9,6 @@ Requirements (python3 -m pip install [requirement]):
 	aiohttp
 Setup:
 	Fill the variables below firstly, then run the script.
-To-Do:
-	fetch lib for every user once, make map and avoid asking individual media every time for every user
 """
 
 plex_ip = ''
@@ -40,7 +38,7 @@ async def _export_posters(poster_queue):
 		await gather(*tasks)
 
 def _export_media(
-		type: str, data: dict, ssn, user_data: tuple, poster_queue: dict, settings_queue: dict, reset_queue: dict,
+		type: str, data: dict, ssn, user_data: tuple, poster_queue: dict, settings_queue: dict, reset_queue: dict, watched_map: dict,
 		export_poster: bool, export_art: bool, export_episode_poster: bool, export_episode_art: bool, export_watched: bool, export_metadata: bool
 	):
 	result_json = {}
@@ -141,10 +139,7 @@ def _export_media(
 
 		#get watched status of all other users
 		for user_id, user_token in zip(user_ids, user_tokens):
-			r = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'X-Plex-Token': user_token})
-			if r.status_code != 200: continue
-			user_watched = r.json()['MediaContainer']['Metadata'][0]
-			result_json[f'_watched_{user_id}'] = user_watched.get('viewOffset', 'viewCount' in user_watched)
+			result_json[f'_watched_{user_id}'] = watched_map[user_token].get(rating_key)
 
 	#put data into file
 	if export_metadata == True or (export_watched == True and type in ('movie','episode')):
@@ -385,7 +380,7 @@ def plex_exporter_importer(
 		lib_id: str=None, movie_name: str=None, series_name: str=None, season_number: int=None, episode_number: int=None, artist_name: str=None, album_name: str=None, track_name: str=None
 	):
 	#returning non-list is for errors
-	result_json = []
+	result_json, watched_map = [], {}
 	poster_queue, settings_queue, reset_queue = {}, [], []
 
 	#preparation and checks
@@ -438,6 +433,7 @@ def plex_exporter_importer(
 		args['export_episode_art'] = 'episode_art' in process
 		args['export_watched'] = 'watched_status' in process
 		args['export_metadata'] = 'metadata' in process
+		args['watched_map'] = watched_map
 	elif type == 'import':
 		args['import_poster'] = 'poster' in process
 		args['import_art'] = 'art' in process
@@ -467,6 +463,16 @@ def plex_exporter_importer(
 		lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all')
 		if lib_output.status_code != 200: continue
 		lib_output = lib_output.json()['MediaContainer'].get('Metadata', [])
+
+		if lib['type'] in ('movie','show') and type == 'export' and 'watched_status' in process:
+			#create watched map for every user to reduce requests
+			for user_token in user_tokens:
+				user_lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'X-Plex-Token': user_token, 'type': '4' if lib['type'] == 'show' else '1'})
+				if user_lib_output.status_code != 200: continue
+				user_lib_output = user_lib_output.json()['MediaContainer'].get('Metadata', [])
+				watched_map[user_token] = {}
+				for media in user_lib_output:
+					watched_map[user_token][media['ratingKey']] = media.get('viewOffset', 'viewCount' in media)
 
 		if lib['type'] == 'movie':
 			#library is movie lib; loop through every movie
