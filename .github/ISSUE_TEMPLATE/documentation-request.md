@@ -2,7 +2,7 @@
 name: Documentation request
 about: Request for change to the documentation
 title: ''
-labels: Documentation request
+labels: 1. Documentation request
 assignees: ''
 
 ---

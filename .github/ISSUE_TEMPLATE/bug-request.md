@@ -2,7 +2,7 @@
 name: Bug request
 about: Request for bug to be fixed
 title: ''
-labels: Bug request
+labels: 1. Bug request
 assignees: ''
 
 ---
