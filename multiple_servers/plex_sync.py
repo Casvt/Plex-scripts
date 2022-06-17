@@ -34,7 +34,8 @@ backup_plex_ip = ''
 backup_plex_port = ''
 backup_plex_api_token = ''
 
-from os import getenv
+from os import getenv, geteuid
+from os.path import join, isfile
 from aiohttp import ClientSession
 from asyncio import gather, run
 from time import perf_counter
@@ -54,10 +55,12 @@ backup_plex_name = getenv('backup_plex_name', backup_plex_name)
 class plex_sync:
 	def __init__(self, main_ssn, backup_ssn, source: str, sync: list, users: list=['@me'], sync_episode_posters: bool=True):
 		#check for illegal argument parsing
-		if any(s not in ('collections','posters','watch_history','playlists') for s in sync):
+		if any(s not in ('collections','posters','watch_history','playlists','intro_markers') for s in sync):
 			return 'Invalid value in "sync" list'
 		if not source in (main_plex_name, backup_plex_name):
 			return 'Invalid value for "source"'
+		if 'intro_markers' in sync and geteuid() != 0:
+			return 'Script needs to be run as root when you want to sync intro_markers'
 
 		#setup vars
 		self.result_json, self.user_tokens, self.map = [], [], {}
@@ -113,7 +116,7 @@ class plex_sync:
 			#skip libs that don't contain the media type
 			if type != None:
 				if lib['type'] == 'show' and not type in ('episode','season','show'): continue
-				if lib['type'] == 'artist' and not type in ('track','artist'): continue
+				if lib['type'] == 'artist' and not type in ('track','album','artist'): continue
 				if lib['type'] == 'movie' and type != 'movie': continue
 
 			if lib['type'] == 'show':
@@ -122,6 +125,7 @@ class plex_sync:
 				else: content_type = ''
 			elif lib['type'] == 'artist':
 				if type == 'track': content_type = '10'
+				elif type == 'album': content_type = '9'
 				elif type == 'artist': content_type = '8'
 			elif lib['type'] == 'movie': content_type = '1'
 
@@ -147,6 +151,12 @@ class plex_sync:
 			start_time = perf_counter()
 			self._posters()
 			print(f'Posters time: {round(perf_counter() - start_time,3)}s')
+
+		if 'intro_markers' in self.sync:
+			start_time = perf_counter()
+			response = self._intro_markers()
+			if isinstance(response, str): return response
+			print(f'Intro markers time: {round(perf_counter() - start_time,3)}s')
 
 		#sync user-specific data
 		if 'watch_history' in self.sync:
@@ -303,6 +313,48 @@ class plex_sync:
 			run(self.__process_posters(lib))
 		return self.result_json
 
+	def _intro_markers(self):
+		print('Intro Markers')
+		from sqlite3 import connect
+
+		#get location to database file
+		db_folder = [s['value'] for s in self.__get_data('target','/:/prefs')['MediaContainer']['Setting'] if s['id'] == 'ButlerDatabaseBackupPath'][0]
+		db_file = join(db_folder, 'com.plexapp.plugins.library.db')
+		if not isfile(db_file):
+			return '	Error: Intro Marker syncing is requested but script is not run on target server'
+
+		#setup db connection
+		db = connect(db_file)
+		cursor = db.cursor()
+
+		#loop through episodes
+		sections = self.__get_data('source','/library/sections')['MediaContainer'].get('Directory',[])
+		for lib in sections:
+			if lib['type'] != 'show': continue
+			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'type': '4', 'includeGuids': '1'})['MediaContainer'].get('Metadata',[])
+			for episode in lib_output:
+				#get markers of the episode on source
+				episode_output = self.__get_data('source',f'/library/metadata/{episode["ratingKey"]}', params={'includeMarkers': '1'})['MediaContainer']['Metadata'][0].get('Marker',[])
+				for marker in episode_output:
+					if marker['type'] == 'intro':
+						#intro marker found
+						intro_start = marker['startTimeOffset']
+						intro_end = marker['endTimeOffset']
+						intro_id = marker['id']
+						break
+				else:
+					#no intro marker found so skip episode
+					continue
+
+				#get ratingkey on target
+				target_ratingkey = self.__find_on_target(guid=episode.get('Guid',[]), title=episode.get('title',''), type='episode').get('ratingKey','')
+				if target_ratingkey == '': continue
+				#set new values in db
+				cursor.execute(f"UPDATE taggings SET time_offset = '{intro_start}' WHERE tag_id = '{intro_id}' AND metadata_item_id = '{target_ratingkey}';")
+				cursor.execute(f"UPDATE taggings SET end_time_offset = '{intro_end}' WHERE tag_id = '{intro_id}' AND metadata_item_id = '{target_ratingkey}';")
+		#save changes
+		db.commit()
+
 	#user-specific actions
 	def _watch_history(self):
 		print('Watch History')
@@ -337,7 +389,7 @@ class plex_sync:
 
 			#process every library (at the same time) in __process_watch_history
 			for lib in sections:
-				if not lib['type'] in ('show','movie','artist'): return
+				if not lib['type'] in ('show','movie','artist'): continue
 				if lib['type'] == 'show': content_type = '4'
 				elif lib['type'] == 'movie': content_type = '1'
 				elif lib['type'] == 'artist': content_type = '10'
@@ -484,9 +536,9 @@ if __name__ == '__main__':
 	backup_ssn.params.update({'X-Plex-Token': backup_plex_api_token})
 
 	#setup arg parsing
-	parser = ArgumentParser(description='Keep data between two plex servers synced.')
+	parser = ArgumentParser(description='Keep data between two plex servers synced', epilog='If you want to use the "intro_markers" feature, it is REQUIRED that the script is run on the target server and is run using the root user (administrative user)')
 	parser.add_argument('-s','--SourceName', choices=[main_plex_name, backup_plex_name], help='Select the server that the data will be pulled from. It will be uploaded on the other server (target server)', required=True)
-	parser.add_argument('-S','--Sync', choices=['collections','posters','watch_history','playlists'], help='Select what to sync; This argument can be given multiple times', action='append', required=True, default=[])
+	parser.add_argument('-S','--Sync', choices=['collections','posters','watch_history','playlists','intro_markers'], help='Select what to sync; This argument can be given multiple times', action='append', required=True, default=[])
 	parser.add_argument('-u','--User', help='Apply user-specific sync actions to these users; This argument can be given multiple times; Use @me to target yourself; Use @all to target everyone', action='append', default=['@me'])
 	parser.add_argument('-p','--NoEpisodePosters', help='When selecting "posters" as (one of) the sync action(s), only sync movie, series and season posters and not episode posters', action='store_false')
 
