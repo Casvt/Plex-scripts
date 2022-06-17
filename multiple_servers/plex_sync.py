@@ -137,6 +137,7 @@ class plex_sync:
 				if (guid and 'Guid' in entry and entry['Guid'] == guid) or (title and 'title' in entry and entry['title'] == title):
 					#media found on target server
 					return entry
+		#media not found on target server
 		return None
 
 	#THE function to run
@@ -331,6 +332,7 @@ class plex_sync:
 		sections = self.__get_data('source','/library/sections')['MediaContainer'].get('Directory',[])
 		for lib in sections:
 			if lib['type'] != 'show': continue
+			print(f'	{lib["title"]}')
 			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'type': '4', 'includeGuids': '1'})['MediaContainer'].get('Metadata',[])
 			for episode in lib_output:
 				#get markers of the episode on source
@@ -347,13 +349,14 @@ class plex_sync:
 					continue
 
 				#get ratingkey on target
-				target_ratingkey = self.__find_on_target(guid=episode.get('Guid',[]), title=episode.get('title',''), type='episode').get('ratingKey','')
-				if target_ratingkey == '': continue
+				target_ratingkey = self.__find_on_target(guid=episode.get('Guid',[]), title=episode.get('title',''), type='episode')
+				if target_ratingkey == None: continue
+				else: target_ratingkey = target_ratingkey.get('ratingKey','')
 				#set new values in db
 				cursor.execute(f"UPDATE taggings SET time_offset = '{intro_start}' WHERE tag_id = '{intro_id}' AND metadata_item_id = '{target_ratingkey}';")
 				cursor.execute(f"UPDATE taggings SET end_time_offset = '{intro_end}' WHERE tag_id = '{intro_id}' AND metadata_item_id = '{target_ratingkey}';")
-		#save changes
-		db.commit()
+				#save changes
+				db.commit()
 
 	#user-specific actions
 	def _watch_history(self):
