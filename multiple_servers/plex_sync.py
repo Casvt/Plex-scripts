@@ -336,6 +336,7 @@ class plex_sync:
 			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'type': '4', 'includeGuids': '1'})['MediaContainer'].get('Metadata',[])
 			for episode in lib_output:
 				#get markers of the episode on source
+				self.result_json.append(episode[['ratingKey']])
 				episode_output = self.__get_data('source',f'/library/metadata/{episode["ratingKey"]}', params={'includeMarkers': '1'})['MediaContainer']['Metadata'][0].get('Marker',[])
 				for marker in episode_output:
 					if marker['type'] == 'intro':
@@ -357,6 +358,7 @@ class plex_sync:
 				cursor.execute(f"UPDATE taggings SET end_time_offset = '{intro_end}' WHERE tag_id = '{intro_id}' AND metadata_item_id = '{target_ratingkey}';")
 			#save changes
 			db.commit()
+		return self.result_json
 
 	#user-specific actions
 	def _watch_history(self):
