@@ -355,8 +355,8 @@ class plex_sync:
 				#set new values in db
 				cursor.execute(f"UPDATE taggings SET time_offset = '{intro_start}' WHERE tag_id = '{intro_id}' AND metadata_item_id = '{target_ratingkey}';")
 				cursor.execute(f"UPDATE taggings SET end_time_offset = '{intro_end}' WHERE tag_id = '{intro_id}' AND metadata_item_id = '{target_ratingkey}';")
-				#save changes
-				db.commit()
+			#save changes
+			db.commit()
 
 	#user-specific actions
 	def _watch_history(self):
