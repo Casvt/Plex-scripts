@@ -578,7 +578,7 @@ def plex_exporter_importer(
 				if result: result_json.append(result)
 
 				#loop through albums of artist; for album exporting/importing
-				for album in artist_output['MediaContainer']['Metadata']:
+				for album in artist_output['MediaContainer'].get('Metadata',[]):
 					if album_name != None and album['title'] != album_name:
 						#a specific album is targeted and this one is not it, so skip
 						continue
@@ -597,7 +597,7 @@ def plex_exporter_importer(
 						return 'Album not found'
 
 				#loop through tracks of artist; for track exporting/importing
-				artist_content = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}/allLeaves').json()['MediaContainer']['Metadata']
+				artist_content = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}/allLeaves').json()['MediaContainer'].get('Metadata',[])
 				# artist_content.sort(key=lambda d: d["parentIndex"])
 				for track in artist_content:
 					if album_name != None and track['parentTitle'] != album_name:
