@@ -317,6 +317,7 @@ class plex_sync:
 	def _intro_markers(self):
 		print('Intro Markers')
 		from sqlite3 import connect
+		from datetime import datetime
 
 		#get location to database file
 		db_folder = [s['value'] for s in self.__get_data('target','/:/prefs')['MediaContainer']['Setting'] if s['id'] == 'ButlerDatabaseBackupPath'][0]
@@ -343,7 +344,6 @@ class plex_sync:
 						#intro marker found
 						intro_start = marker['startTimeOffset']
 						intro_end = marker['endTimeOffset']
-						intro_id = marker['id']
 						break
 				else:
 					#no intro marker found so skip episode
@@ -353,11 +353,26 @@ class plex_sync:
 				target_ratingkey = self.__find_on_target(guid=episode.get('Guid',[]), title=episode.get('title',''), type='episode')
 				if target_ratingkey == None: continue
 				else: target_ratingkey = target_ratingkey.get('ratingKey','')
-				#set new values in db
-				cursor.execute(f"UPDATE taggings SET time_offset = '{intro_start}' WHERE tag_id = '{intro_id}' AND metadata_item_id = '{target_ratingkey}';")
-				cursor.execute(f"UPDATE taggings SET end_time_offset = '{intro_end}' WHERE tag_id = '{intro_id}' AND metadata_item_id = '{target_ratingkey}';")
-			#save changes
-			db.commit()
+				#check if media already has intro marker
+				cursor.execute(f"SELECT * FROM taggings WHERE text = 'intro' AND metadata_item_id = '{target_ratingkey}';")
+				if cursor.fetchone() == None:
+					#no intro marker exists so create one
+					d = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+					cursor.execute("SELECT tag_id FROM taggings WHERE text = 'intro' LIMIT 1;")
+					i = cursor.fetchone()
+					if i == None:
+						#no id yet for intro's so make one that isn't taken yet
+						cursor.execute("SELECT tag_id FROM taggings ORDER BY tag_id DESC LIMIT 1;")
+						i = int(cursor.fetchone()[0]) + 1
+					else:
+						i = i[0]
+					cursor.execute(f"INSERT INTO taggings (metadata_item_id,tag_id,[index],text,time_offset,end_time_offset,thumb_url,created_at,extra_data) VALUES ({target_ratingkey},{i},0,'intro',{intro_start},{intro_end},'','{d}','pv%3Aversion=5');")
+				else:
+					#intro marker exists so update timestamps
+					cursor.execute(f"UPDATE taggings SET time_offset = '{intro_start}' WHERE text = 'intro' AND metadata_item_id = '{target_ratingkey}';")
+					cursor.execute(f"UPDATE taggings SET end_time_offset = '{intro_end}' WHERE text = 'intro' AND metadata_item_id = '{target_ratingkey}';")
+				#save changes
+				db.commit()
 		return self.result_json
 
 	#user-specific actions
