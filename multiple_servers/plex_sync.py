@@ -34,6 +34,11 @@ backup_plex_ip = ''
 backup_plex_port = ''
 backup_plex_api_token = ''
 
+#ADVANCED SETTINGS
+#Hardcode the folder where the plex database is in
+#Leave empty unless really needed
+database_folder = ''
+
 from os import getenv, geteuid
 from os.path import join, isfile
 from aiohttp import ClientSession
@@ -51,6 +56,7 @@ backup_plex_port = getenv('backup_plex_port', backup_plex_port)
 backup_plex_api_token = getenv('backup_plex_api_token', backup_plex_api_token)
 backup_base_url = f"http://{backup_plex_ip}:{backup_plex_port}"
 backup_plex_name = getenv('backup_plex_name', backup_plex_name)
+database_folder = getenv('database_folder', database_folder)
 
 class plex_sync:
 	def __init__(self, main_ssn, backup_ssn, source: str, sync: list, users: list=['@me'], sync_episode_posters: bool=True):
@@ -320,10 +326,11 @@ class plex_sync:
 		from datetime import datetime
 
 		#get location to database file
-		db_folder = [s['value'] for s in self.__get_data('target','/:/prefs')['MediaContainer']['Setting'] if s['id'] == 'ButlerDatabaseBackupPath'][0]
+		if database_folder == '':
+			db_folder = [s['value'] for s in self.__get_data('target','/:/prefs')['MediaContainer']['Setting'] if s['id'] == 'ButlerDatabaseBackupPath'][0]
 		db_file = join(db_folder, 'com.plexapp.plugins.library.db')
 		if not isfile(db_file):
-			return '	Error: Intro Marker syncing is requested but script is not run on target server'
+			return '	Error: Intro Marker syncing is requested but script is not run on target server, or value of database_folder is invalid'
 
 		#setup db connection
 		db = connect(db_file)
