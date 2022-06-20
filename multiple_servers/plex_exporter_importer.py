@@ -15,6 +15,11 @@ plex_ip = ''
 plex_port = ''
 plex_api_token = ''
 
+#ADVANCED SETTINGS
+#Hardcode the folder where the plex database is in
+#Leave empty unless really needed
+database_folder = ''
+
 from os import path, getenv
 from json import dump, load
 from re import findall
@@ -26,6 +31,7 @@ plex_ip = getenv('plex_ip', plex_ip)
 plex_port = getenv('plex_port', plex_port)
 plex_api_token = getenv('plex_api_token', plex_api_token)
 base_url = f"http://{plex_ip}:{plex_port}"
+database_folder = getenv('database_folder', database_folder)
 
 async def _download_posters(session, url, poster_queue):
 	async with session.get(url, params={'X-Plex-Token': plex_api_token}) as r:
@@ -39,7 +45,7 @@ async def _export_posters(poster_queue):
 
 def _export_media(
 		type: str, data: dict, ssn, user_data: tuple, poster_queue: dict, settings_queue: dict, reset_queue: dict, watched_map: dict,
-		export_poster: bool, export_art: bool, export_episode_poster: bool, export_episode_art: bool, export_watched: bool, export_metadata: bool
+		export_poster: bool, export_art: bool, export_episode_poster: bool, export_episode_art: bool, export_watched: bool, export_metadata: bool, export_intro_markers: bool
 	):
 	result_json = {}
 	user_ids, user_tokens = user_data
@@ -108,7 +114,7 @@ def _export_media(
 		return 'Unknown source type when trying to extract data (internal error)'
 
 	rating_key = data['ratingKey']
-	media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}')
+	media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'includeMarkers': '1'})
 	if media_info.status_code != 200: return result_json
 	media_info = media_info.json()['MediaContainer']['Metadata'][0]
 
@@ -135,14 +141,24 @@ def _export_media(
 	#extract special metadata
 	if export_watched == True and type in ('movie','episode'):
 		#get watched status of admin
-		result_json[f'_watched_admin'] = media_info.get('viewOffset', 'viewCount' in media_info)
+		result_json['_watched_admin'] = media_info.get('viewOffset', 'viewCount' in media_info)
 
 		#get watched status of all other users
 		for user_id, user_token in zip(user_ids, user_tokens):
 			result_json[f'_watched_{user_id}'] = watched_map[user_token].get(rating_key)
 
+	if export_intro_markers == True and type == 'episode':
+		for marker in media_info.get('Marker',[]):
+			if marker['type'] == 'intro':
+				#intro marker found
+				result_json['_intro_marker'] = {
+					'intro_start': marker['startTimeOffset'],
+					'intro_end': marker['endTimeOffset']
+				}
+				break
+
 	#put data into file
-	if export_metadata == True or (export_watched == True and type in ('movie','episode')):
+	if export_metadata == True or (export_watched == True and type in ('movie','episode')) or (export_intro_markers == True and type == 'episode'):
 		dump(result_json, open(file_data, 'w+'), indent=4)
 
 	return result_json, poster_queue, settings_queue, reset_queue
@@ -155,7 +171,7 @@ async def _import_queue(poster_queue, settings_queue):
 
 def _import_media(
 		type: str, data: dict, media_lib_id: str, ssn, user_data: tuple, poster_queue: dict, settings_queue: dict, reset_queue: dict,
-		import_poster: bool, import_art: bool, import_episode_poster: bool, import_episode_art: bool, import_watched: bool, import_metadata: bool
+		import_poster: bool, import_art: bool, import_episode_poster: bool, import_episode_art: bool, import_watched: bool, import_metadata: bool, import_intro_markers: bool
 	):
 	result_json = {}
 	user_ids, user_tokens = user_data
@@ -195,8 +211,8 @@ def _import_media(
 		return 'Unknown source type when trying to import data (internal error)'
 
 	rating_key = data['ratingKey']
-	if import_metadata:
-		media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}')
+	if import_metadata == True or import_intro_markers == True:
+		media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'includeMarkers': '1'})
 		if media_info.status_code != 200: return result_json
 		media_info = media_info.json()['MediaContainer']['Metadata'][0]
 
@@ -204,18 +220,35 @@ def _import_media(
 	file_thumb = f'{root_file}_thumb.jpg'
 	file_art = f'{root_file}_art.jpg'
 
-	if path.isfile(file_data) and import_metadata == True:
+	if path.isfile(file_data) and True in (import_metadata, import_watched, import_intro_markers):
 		#metadata file exists for this media
 		file_data_json = load(open(file_data, 'r'))
-		payload = {
-			'type': media_type,
-			'id': rating_key,
-			'thumb.locked': 1,
-			'art.locked': 1,
-			'X-Plex-Token': plex_api_token
-		}
-		if type == 'album':
-			payload['artist.id.value'] = data['parentRatingKey']
+		if import_metadata == True:
+			payload = {
+				'type': media_type,
+				'id': rating_key,
+				'thumb.locked': 1,
+				'art.locked': 1,
+				'X-Plex-Token': plex_api_token
+			}
+			if type == 'album':
+				payload['artist.id.value'] = data['parentRatingKey']
+
+		if '_intro_marker' in file_data_json:
+			from sqlite3 import connect
+			from datetime import datetime
+			from os.path import join, isfile
+
+			#get location to database file
+			if database_folder == '':
+				db_folder = [s['value'] for s in ssn.get(f'{base_url}/:/prefs').json()['MediaContainer']['Setting'] if s['id'] == 'ButlerDatabaseBackupPath'][0]
+			db_file = join(db_folder, 'com.plexapp.plugins.library.db')
+			if not isfile(db_file):
+				return 'Intro Marker importing is requested but script is not run on target plex server, or value of database_folder is invalid'
+
+			#setup db connection
+			db = connect(db_file)
+			cursor = db.cursor()
 
 		#build the payload that sets all the values
 		for option, value in file_data_json.items():
@@ -239,6 +272,28 @@ def _import_media(
 					elif isinstance(value, int):
 						#set media to offset (partially watched; on deck)
 						ssn.get(f'{base_url}/:/progress', params={'identifier': 'com.plexapp.plugins.library', 'key': rating_key, 'time': value, 'state': 'stopped', 'X-Plex-Token': user_token})
+
+				elif import_intro_markers == True and option == '_intro_marker':
+					#check if media already has intro marker
+					cursor.execute(f"SELECT * FROM taggings WHERE text = 'intro' AND metadata_item_id = '{rating_key}';")
+					if cursor.fetchone() == None:
+						#no intro marker exists so create one
+						d = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+						cursor.execute("SELECT tag_id FROM taggings WHERE text = 'intro' LIMIT 1;")
+						i = cursor.fetchone()
+						if i == None:
+							#no id yet for intro's so make one that isn't taken yet
+							cursor.execute("SELECT tag_id FROM taggings ORDER BY tag_id DESC LIMIT 1;")
+							i = int(cursor.fetchone()[0]) + 1
+						else:
+							i = i[0]
+						cursor.execute(f"INSERT INTO taggings (metadata_item_id,tag_id,[index],text,time_offset,end_time_offset,thumb_url,created_at,extra_data) VALUES ({rating_key},{i},0,'intro',{value['intro_start']},{value['intro_end']},'','{d}','pv%3Aversion=5');")
+					else:
+						#intro marker exists so update timestamps
+						cursor.execute(f"UPDATE taggings SET time_offset = '{value['intro_start']}' WHERE text = 'intro' AND metadata_item_id = '{rating_key}';")
+						cursor.execute(f"UPDATE taggings SET end_time_offset = '{value['intro_end']}' WHERE text = 'intro' AND metadata_item_id = '{rating_key}';")
+					#save changes
+					db.commit()
 
 			elif option in ('Genre','Writer','Director','Collection','Style', 'Mood', 'Country', 'Similar') or isinstance(value, list):
 				#list of labels
@@ -433,6 +488,7 @@ def plex_exporter_importer(
 		args['export_episode_art'] = 'episode_art' in process
 		args['export_watched'] = 'watched_status' in process
 		args['export_metadata'] = 'metadata' in process
+		args['export_intro_markers'] = 'intro_marker' in process
 		args['watched_map'] = watched_map
 	elif type == 'import':
 		args['import_poster'] = 'poster' in process
@@ -440,6 +496,7 @@ def plex_exporter_importer(
 		args['import_episode_poster'] = 'episode_poster' in process
 		args['import_episode_art'] = 'episode_art' in process
 		args['import_watched'] = 'watched_status' in process
+		args['import_intro_markers'] = 'intro_marker' in process
 		args['import_metadata'] = 'metadata' in process
 	elif type == 'reset':
 		args['reset_poster'] = 'poster' in process
@@ -665,9 +722,9 @@ if __name__ == '__main__':
 	ssn.params.update({'X-Plex-Token': plex_api_token})
 
 	#setup arg parsing
-	parser = ArgumentParser(description='Export plex metadata to a file that can then be imported back later')
+	parser = ArgumentParser(description='Export plex metadata to a file that can then be imported back later', epilog='If you want to use the "intro_marker" feature when importing, it is REQUIRED that the script is run on the server on which the targeted plex server is too and that the script is run using the root user (administrative user)')
 	parser.add_argument('-t','--Type', choices=['import','export','reset'], required=True, type=str, help='Either export or import metadata into plex or reset import (unlock all fields)')
-	parser.add_argument('-p','--Process', choices=['metadata','watched_status','poster','episode_poster','art','episode_art'], help='EXPORT/IMPORT ONLY: Select what to export/import; this argument can be given multiple times to select multiple things', action='append', required=True)
+	parser.add_argument('-p','--Process', choices=['metadata','watched_status','poster','episode_poster','art','episode_art','intro_marker'], help='EXPORT/IMPORT ONLY: Select what to export/import; this argument can be given multiple times to select multiple things', action='append', required=True)
 
 	#args regarding target selection
 	#general selectors
