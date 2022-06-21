@@ -135,6 +135,9 @@ dmypy.json
 # pre-commit
 .pre-commit-config.yaml
 
+# Database files
+*.db
+
 # project related
 *_DEBUG*
 tests/
