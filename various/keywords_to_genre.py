@@ -53,7 +53,7 @@ def keywords_to_genre(ssn, keywords: list, library_names: list, movie_names: lis
 			if not media_guid: continue
 
 			#get all genres that media has been tagged with
-			media_genres = {str(i): g['tag'] for i, g in enumerate(media_output.get('Genre', []))}
+			media_genres = [g['tag'] for g in media_output.get('Genre', [])]
 
 			#get all keywords that media has on imdb
 			media_info = ssn.get(f'https://www.imdb.com/title/{media_guid}/keywords').text
@@ -61,13 +61,12 @@ def keywords_to_genre(ssn, keywords: list, library_names: list, movie_names: lis
 
 			#go through every target keyword and if it's in the list (but not already in the genre list), add it to the genres
 			new_genres = []
-			media_genres_values = media_genres.values()
 			for k in keywords:
 				if '*' in k:
 					result = fnmatch_filter(media_keywords, k)
-					new_genres += [r for r in result if not r in media_genres_values]
+					new_genres += [r for r in result if not r in media_genres]
 				else:
-					if k in media_keywords and not k in media_genres_values:
+					if k in media_keywords and not k in media_genres:
 						new_genres.append(k)
 
 			#upload new genres
@@ -75,7 +74,7 @@ def keywords_to_genre(ssn, keywords: list, library_names: list, movie_names: lis
 				'type': '2' if media['type'] == 'show' else '1',
 				'id': media['ratingKey'],
 				'genre.locked': '1',
-				**{f'genre[{i}].tag.tag': g for i, g in list(media_genres.items()) + list(zip(range(len(media_genres), len(media_genres) + len(new_genres)), new_genres))}
+				**{f'genre[{c}].tag.tag': v for c, v in enumerate(media_genres + new_genres)}
 			}
 			ssn.put(f'{base_url}/library/sections/{lib_id}/all', params=payload)
 
