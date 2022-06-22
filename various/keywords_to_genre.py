@@ -75,7 +75,7 @@ def keywords_to_genre(ssn, keywords: list, library_names: list, movie_names: lis
 				'type': '2' if media['type'] == 'show' else '1',
 				'id': media['ratingKey'],
 				'genre.locked': '1',
-				**{f'genre[{i}].tag.tag': g for i, g in list(media_genres.items()) + list(zip(range(len(media_genres), len(media_genres + new_genres)), new_genres))}
+				**{f'genre[{i}].tag.tag': g for i, g in list(media_genres.items()) + list(zip(range(len(media_genres), len(media_genres) + len(new_genres)), new_genres))}
 			}
 			ssn.put(f'{base_url}/library/sections/{lib_id}/all', params=payload)
 
