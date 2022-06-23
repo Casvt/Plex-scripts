@@ -43,7 +43,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS movie (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT NOT NULL,
 			titleSort TEXT,
@@ -75,7 +75,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS show (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT NOT NULL,
 			titleSort TEXT,
@@ -101,7 +101,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS season (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT NOT NULL,
 			summary TEXT,
@@ -121,7 +121,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS episode (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT NOT NULL,
 			titleSort TEXT,
@@ -148,7 +148,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS artist (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT NOT NULL,
 			titleSort TEXT,
@@ -175,7 +175,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS album (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT NOT NULL,
 			titleSort TEXT,
@@ -203,7 +203,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS track (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT NOT NULL,
 			originalTitle TEXT,
