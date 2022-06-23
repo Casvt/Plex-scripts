@@ -280,7 +280,9 @@ def _export(
 		db_keys.append('watched_status')
 		db_watched = ['_admin',str(media_info.get('viewOffset', 'viewCount' in media_info))]
 		for user_id, user_token in zip(user_ids, user_tokens):
-			db_watched += [user_id, watched_map[user_token].get(rating_key,'')]
+			user_watched = watched_map.get(user_token, {}).get(rating_key, '')
+			if user_watched == '': continue
+			db_watched += [user_id, user_watched]
 		db_values.append(",".join(db_watched))
 
 	if target_intro_markers == True and type in 'episode':
