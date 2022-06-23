@@ -217,7 +217,10 @@ media_types = {
 	)
 }
 
-def _leave(db, plex_db=None):
+def _leave(db, plex_db=None, e=None):
+	if e != None:
+		print('AN ERROR OCCURED:')
+		print(e)
 	print('Shutting down...')
 	db.commit()
 	if plex_db != None:
@@ -622,8 +625,8 @@ def plex_exporter_importer(
 				if verbose == True: print(f'	{movie["title"]}')
 				try:
 					response = method(type='movie', data=movie, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-				except KeyboardInterrupt:
-					_leave(**exit_args)
+				except Exception as e:
+					_leave(**exit_args, e=e)
 				else:
 					if isinstance(response, str): return response
 					else: result_json.append(movie['ratingKey'])
@@ -647,8 +650,8 @@ def plex_exporter_importer(
 				show_info = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
 				try:
 					response = method(type='show', data=show_info, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-				except KeyboardInterrupt:
-					_leave(**exit_args)
+				except Exception as e:
+					_leave(**exit_args, e=e)
 				else:
 					if isinstance(response, str): return response
 					else: result_json.append(show['ratingKey'])
@@ -660,8 +663,8 @@ def plex_exporter_importer(
 
 					try:
 						response = method(type='season', data=season, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-					except KeyboardInterrupt:
-						_leave(**exit_args)
+					except Exception as e:
+						_leave(**exit_args, e=e)
 					else:
 						if isinstance(response, str): return response
 						else: result_json.append(season['ratingKey'])
@@ -683,8 +686,8 @@ def plex_exporter_importer(
 					if verbose == True: print(f'		S{episode["parentIndex"]}E{episode["index"]} - {episode["title"]}')
 					try:
 						response = method(type='episode', data=episode, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-					except KeyboardInterrupt:
-						_leave(**exit_args)
+					except Exception as e:
+						_leave(**exit_args, e=e)
 					else:
 						if isinstance(response, str): return response
 						else: result_json.append(episode['ratingKey'])
@@ -714,8 +717,8 @@ def plex_exporter_importer(
 				artist_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
 				try:
 					response = method(type='artist', data=artist_info, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-				except KeyboardInterrupt:
-					_leave(**exit_args)
+				except Exception as e:
+					_leave(**exit_args, e=e)
 				else:
 					if isinstance(response, str): return response
 					else: result_json.append(artist['ratingKey'])
@@ -727,8 +730,8 @@ def plex_exporter_importer(
 
 					try:
 						response = method(type='album', data=album, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-					except KeyboardInterrupt:
-						_leave(**exit_args)
+					except Exception as e:
+						_leave(**exit_args, e=e)
 					else:
 						if isinstance(response, str): return response
 						else: result_json.append(album['ratingKey'])
@@ -750,8 +753,8 @@ def plex_exporter_importer(
 					if verbose == True: print(f'		D{track["parentIndex"]}T{track["index"]} - {track["title"]}')
 					try:
 						response = method(type='track', data=track, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-					except KeyboardInterrupt:
-						_leave(**exit_args)
+					except Exception as e:
+						_leave(**exit_args, e=e)
 					else:
 						if isinstance(response, str): return response
 						else: result_json.append(track['ratingKey'])
