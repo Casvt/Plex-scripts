@@ -520,6 +520,7 @@ def plex_exporter_importer(
 	#setup db location
 	if type == 'export':
 		if path.isdir(location):
+			database_file = f'{path.splitext(path.abspath(__file__))[0]}.db'
 			database_file = path.join(location, f'{path.splitext(__file__)[0]}.db')
 			print(f'Exporting to {database_file}')
 			if path.isfile(database_file):
@@ -831,18 +832,18 @@ EPILOG
 If you want to use the "intro_marker" or "chapter_thumbnail" feature when importing, it is REQUIRED that the script is run on the server on which the targeted plex server is too and that the script is run using the root user (administrative user).
 
 -L/--Location
-	When exporting, you might want to set a different folder to put the database file in (default is script folder),
-	which you can set using the -L/--Location option.
+	When using the script, you might want to influence how the script handles the database file,
+	which you can set using the -L/--Location option. See:
 
-	When exporting after already having a database created (e.g. you run the script weekly),
-	pass the path to the already existing database to update that one instead of making a new one (STRONGLY RECOMMENDED).
-
-	When importing, it\'s required to pass the path to the database file as the value.
+	When exporting and not giving this argument, the database file will be put in the same folder as the script.
+	When exporting and giving a path to a folder, the database file will be put in that folder.
+	When exporting and giving a path to a database file, that database file will be used to put the data in or will be updated if data is already in it (STRONGLY RECOMMENDED IF POSSIBLE)
+	When importing and giving a path to a database file, that database file will be read and used as the source of the data that will be applied
 """
 	parser = ArgumentParser(formatter_class=RawDescriptionHelpFormatter, description='Export plex metadata to a database that can then be imported back later', epilog=epilog)
 	parser.add_argument('-t','--Type', choices=['import','export','reset'], required=True, type=str, help='Either export/import plex metadata or reset import (unlock all fields)')
 	parser.add_argument('-p','--Process', choices=['metadata','watched_status','poster','episode_poster','art','episode_art','intro_marker','chapter_thumbnail'], help='EXPORT/IMPORT ONLY: Select what to export/import; this argument can be given multiple times to select multiple things', action='append', required=True)
-	parser.add_argument('-L','--Location', type=str, help='SEE EPILOG', default='.')
+	parser.add_argument('-L','--Location', type=str, help='SEE EPILOG', default=path.dirname(path.abspath(__file__)))
 	parser.add_argument('-v','--Verbose', help='Make script more verbose', action='store_true')
 
 	#args regarding target selection
