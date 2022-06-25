@@ -652,12 +652,12 @@ def plex_exporter_importer(
 			lib_output = lib_output.json()['MediaContainer'].get('Metadata',[])
 
 			if lib['type'] in ('movie','show') and type == 'export' and 'watched_status' in process:
-			  #create watched map for every user to reduce requests
-			  for user_token in user_tokens:
-				  user_lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'X-Plex-Token': user_token, 'type': '4' if lib['type'] == 'show' else '1'})
-				  if user_lib_output.status_code != 200: continue
-				  user_lib_output = user_lib_output.json()['MediaContainer'].get('Metadata', [])
-				  watched_map[user_token] = dict(map(lambda m: (m['ratingKey'], m.get('viewOffset','viewCount' in m)), user_lib_output))
+				#create watched map for every user to reduce requests
+				for user_token in user_tokens:
+					user_lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'X-Plex-Token': user_token, 'type': '4' if lib['type'] == 'show' else '1'})
+					if user_lib_output.status_code != 200: continue
+					user_lib_output = user_lib_output.json()['MediaContainer'].get('Metadata', [])
+					watched_map[user_token] = dict(map(lambda m: (m['ratingKey'], m.get('viewOffset','viewCount' in m)), user_lib_output))
 
 			if type == 'export' and not lib['type'] in timestamp_map:
 				if lib['type'] == 'show':
@@ -668,8 +668,8 @@ def plex_exporter_importer(
 					lib_types = [lib['type']]
 
 				for lib_type in lib_types:
-				  cursor.execute(f"SELECT rating_key, updated_at FROM {lib_type};")
-				  timestamp_map[lib_type] = dict(cursor.fetchall())
+					cursor.execute(f"SELECT rating_key, updated_at FROM {lib_type};")
+					timestamp_map[lib_type] = dict(cursor.fetchall())
 
 			if lib['type'] == 'movie':
 				for movie in lib_output:
