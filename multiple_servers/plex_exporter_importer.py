@@ -229,6 +229,16 @@ media_types = {
 		"""
 	)
 }
+process_summary = {
+	'metadata': "The standard plex metadata like title, summary, tags and more.",
+	'watched_status': "The watched status of the media for every user: watched, not watched or partially watched.",
+	'poster': "The (custom) poster of movies, shows, seasons, artists and albums.",
+	'episode_poster': "The (custom) poster of episodes.",
+	'art': "The (custom) art of movies, shows, seasons, artists and albums.",
+	'episode_art': "The (custom) art of episodes.",
+	'intro_marker': "The intro marker of episodes, which describes the beginning and end of the intro.",
+	'chapter_thumbnail': "The by plex automatically generated thumbnails for chapters."
+}
 
 def _leave(db, plex_db=None, e=None):
 	if e != None:
@@ -522,11 +532,14 @@ def plex_exporter_importer(
 		if path.isdir(location):
 			database_file = f'{path.splitext(path.abspath(__file__))[0]}.db'
 			database_file = path.join(location, f'{path.splitext(__file__)[0]}.db')
-			print(f'Exporting to {database_file}')
 			if path.isfile(database_file):
-				print('Database file already exists, so updating')
+				print(f'Exporting to {database_file} (Updating)')
+			else:
+				print(f'Exporting to {database_file}')
 
 		elif path.isfile(location):
+			if not location.endswith('.db'):
+				return 'Invalid location value; file needs to have ".db" extension'
 			database_file = location
 			print(f'Exporting to {database_file} (Updating)')
 
@@ -540,7 +553,6 @@ def plex_exporter_importer(
 		else:
 			return 'Location not found'
 
-
 	elif type == 'reset':
 		if path.isdir(location):
 			database_file = path.join(location, f'{path.splitext(__file__)[0]}.db')
@@ -548,6 +560,38 @@ def plex_exporter_importer(
 			database_file = location
 		else:
 			return 'Location not found'
+
+	#build summary
+	#what's going to be processed
+	summary = f"You're going to {type} the following:\n"
+	summary += ''.join([f'	{process_summary.get(process_entry, process_entry)}\n' for process_entry in process])
+	#what's targeted
+	summary += f'This is going to be done for '
+	if all == True: summary += 'your complete plex library.'
+	elif True in (all_movie, all_show, all_music):
+		targeted_libs = []
+		if all_movie == True: targeted_libs.append('movie')
+		if all_show == True: targeted_libs.append('show')
+		if all_music == True: targeted_libs.append('music')
+		summary += f'all {"/".join(targeted_libs)} libraries.'
+	else:
+		if movie_name != None: summary += f'{library_name} -> {movie_name}.'
+		elif series_name != None:
+			summary += f'{library_name} -> {series_name}'
+			if season_number != None:
+				summary += f' -> Season {season_number}'
+				if episode_number != None: summary += f' -> Episode {episode_number}.'
+				else: summary += '.'
+			else: summary += '.'
+		elif artist_name != None:
+			summary += f'{library_name} -> {artist_name}'
+			if album_name != None:
+				summary += f' -> Album {album_name}'
+				if track_name != None: summary += f' -> Track {track_name}.'
+				else: summary += '.'
+			else: summary += '.'
+		else: summary += f'the library {library_name}.'
+	print(summary)
 
 	#setup connection to plex db if needed
 	if ('intro_marker' in process and type == 'import') or ('chapter_thumbnail' in process and type in ('import','export')):
@@ -878,7 +922,9 @@ If you want to use the "intro_marker" or "chapter_thumbnail" feature when import
 	)
 	print(f'Time: {round(perf_counter() - start_time, 3)}s')
 	if not isinstance(response, list):
-		if response == 'Both "all" and a target-specifier are set':
+		if response == 'Invalid location value; file needs to have ".db" extension':
+			parser.error('-L/--Location has a value that does not lead to a database file (.db)')
+		elif response == 'Both "all" and a target-specifier are set':
 			parser.error('Both -a/--All and a target-specifier are set')
 		elif response == '"all" is set to False but no target-specifier is given':
 			parser.error('-a/--All is not set but also no target-specifier is set')
