@@ -261,7 +261,7 @@ def _export(
 	#skip media if it hasn't been edited since last time (or it isn't matched to any series)
 	updated_at = timestamp_map[type].get(rating_key)
 	if updated_at != None:
-		if updated_at == data['updatedAt']:
+		if updated_at == data.get('updatedAt',0):
 			return
 		else:
 			cursor.execute(f"DELETE FROM {type} WHERE rating_key = {rating_key}")
