@@ -52,7 +52,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS movie (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT,
 			titleSort TEXT,
@@ -86,7 +86,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS show (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT,
 			titleSort TEXT,
@@ -112,7 +112,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS season (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT,
 			summary TEXT,
@@ -132,7 +132,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS episode (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT,
 			titleSort TEXT,
@@ -161,7 +161,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS artist (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT,
 			titleSort TEXT,
@@ -188,7 +188,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS album (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT,
 			titleSort TEXT,
@@ -216,7 +216,7 @@ media_types = {
 		"""
 		CREATE TABLE IF NOT EXISTS track (
 			rating_key TEXT UNIQUE,
-			guid TEXT UNIQUE,
+			guid TEXT,
 			updated_at INTEGER,
 			title TEXT,
 			originalTitle TEXT,
@@ -230,7 +230,10 @@ media_types = {
 	)
 }
 
-def _leave(db, plex_db=None):
+def _leave(db, plex_db=None, e=None):
+	if e != None:
+		print('AN ERROR OCCURED:')
+		print(e)
 	print('Shutting down...')
 	db.commit()
 	if plex_db != None:
@@ -629,206 +632,181 @@ def plex_exporter_importer(
 		args['database_folder'] = database_root
 
 	#start working on the media
-	sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
-	for lib in sections:
-		if not (all == True \
-		or (library_name != None and lib['title'] == library_name) \
-		or (all_movie == True and lib['type'] == 'movie') \
-		or (all_show == True and lib['type'] == 'show') \
-		or (all_music == True and lib['type'] == 'artist')):
-			#a specific library is targeted and this one is not it, so skip
-			continue
+	try:
+		sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
+		for lib in sections:
+			if not (all == True \
+			or (library_name != None and lib['title'] == library_name) \
+			or (all_movie == True and lib['type'] == 'movie') \
+			or (all_show == True and lib['type'] == 'show') \
+			or (all_music == True and lib['type'] == 'artist')):
+				#a specific library is targeted and this one is not it, so skip
+				continue
 
-		#this library (or something in it) should be processed
-		print(lib['title'])
-		if type in ('import','reset'):
-			args['media_lib_id'] = lib['key']
-		lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'includeGuids': '1'})
-		if lib_output.status_code != 200: continue
-		lib_output = lib_output.json()['MediaContainer'].get('Metadata',[])
+			#this library (or something in it) should be processed
+			print(lib['title'])
+			if type in ('import','reset'):
+				args['media_lib_id'] = lib['key']
+			lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'includeGuids': '1'})
+			if lib_output.status_code != 200: continue
+			lib_output = lib_output.json()['MediaContainer'].get('Metadata',[])
 
-		if lib['type'] in ('movie','show') and type == 'export' and 'watched_status' in process:
-			#create watched map for every user to reduce requests
-			for user_token in user_tokens:
-				user_lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'X-Plex-Token': user_token, 'type': '4' if lib['type'] == 'show' else '1'})
-				if user_lib_output.status_code != 200: continue
-				user_lib_output = user_lib_output.json()['MediaContainer'].get('Metadata', [])
-				watched_map[user_token] = dict(map(lambda m: (m['ratingKey'], m.get('viewOffset','viewCount' in m)), user_lib_output))
+			if lib['type'] in ('movie','show') and type == 'export' and 'watched_status' in process:
+			  #create watched map for every user to reduce requests
+			  for user_token in user_tokens:
+				  user_lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'X-Plex-Token': user_token, 'type': '4' if lib['type'] == 'show' else '1'})
+				  if user_lib_output.status_code != 200: continue
+				  user_lib_output = user_lib_output.json()['MediaContainer'].get('Metadata', [])
+				  watched_map[user_token] = dict(map(lambda m: (m['ratingKey'], m.get('viewOffset','viewCount' in m)), user_lib_output))
 
-		if type == 'export' and not lib['type'] in timestamp_map:
-			if lib['type'] == 'show':
-				lib_types = ['show','season','episode']
-			elif lib['type'] == 'artist':
-				lib_types = ['artist','album','track']
-			else:
-				lib_types = [lib['type']]
-
-			for lib_type in lib_types:
-				cursor.execute(f"SELECT rating_key, updated_at FROM {lib_type};")
-				timestamp_map[lib_type] = dict(cursor.fetchall())
-
-		if lib['type'] == 'movie':
-			for movie in lib_output:
-				if movie_name != None and movie['title'] != movie_name:
-					continue
-
-				if verbose == True: print(f'	{movie["title"]}')
-				try:
-					response = method(type='movie', data=movie, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-				except KeyboardInterrupt:
-					_leave(**exit_args)
+			if type == 'export' and not lib['type'] in timestamp_map:
+				if lib['type'] == 'show':
+					lib_types = ['show','season','episode']
+				elif lib['type'] == 'artist':
+					lib_types = ['artist','album','track']
 				else:
+					lib_types = [lib['type']]
+
+				for lib_type in lib_types:
+				  cursor.execute(f"SELECT rating_key, updated_at FROM {lib_type};")
+				  timestamp_map[lib_type] = dict(cursor.fetchall())
+
+			if lib['type'] == 'movie':
+				for movie in lib_output:
+					if movie_name != None and movie['title'] != movie_name:
+						continue
+
+					if verbose == True: print(f'	{movie["title"]}')
+					response = method(type='movie', data=movie, watched_map=watched_map, timestamp_map=timestamp_map, **args)
 					if isinstance(response, str): return response
 					else: result_json.append(movie['ratingKey'])
 
-				if movie_name != None:
-					break
-			else:
-				if movie_name != None:
-					return 'Movie not found'
-
-		elif lib['type'] == 'show':
-			for show in lib_output:
-				if series_name != None and show['title'] != series_name:
-					continue
-
-				season_info = ssn.get(f'{base_url}{show["key"]}', params={'includeGuids': '1'})
-				if season_info.status_code != 200: continue
-				season_info = season_info.json()['MediaContainer']['Metadata']
-				if verbose == True: print(f'	{show["title"]}')
-				#process show
-				show_info = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
-				try:
-					response = method(type='show', data=show_info, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-				except KeyboardInterrupt:
-					_leave(**exit_args)
+					if movie_name != None:
+						break
 				else:
+					if movie_name != None:
+						return 'Movie not found'
+
+			elif lib['type'] == 'show':
+				for show in lib_output:
+					if series_name != None and show['title'] != series_name:
+						continue
+
+					season_info = ssn.get(f'{base_url}{show["key"]}', params={'includeGuids': '1'})
+					if season_info.status_code != 200: continue
+					season_info = season_info.json()['MediaContainer']['Metadata']
+					if verbose == True: print(f'	{show["title"]}')
+					#process show
+					show_info = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
+					response = method(type='show', data=show_info, watched_map=watched_map, timestamp_map=timestamp_map, **args)
 					if isinstance(response, str): return response
 					else: result_json.append(show['ratingKey'])
 
-				#process seasons
-				for season in season_info:
-					if season_number != None and season['index'] != season_number:
-						continue
+					#process seasons
+					for season in season_info:
+						if season_number != None and season['index'] != season_number:
+							continue
 
-					try:
 						response = method(type='season', data=season, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-					except KeyboardInterrupt:
-						_leave(**exit_args)
-					else:
 						if isinstance(response, str): return response
 						else: result_json.append(season['ratingKey'])
 
-					if season_number != None:
-						break
-				else:
-					if season_number != None:
-						return 'Season not found'
-
-				#process episodes
-				episode_info = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}/allLeaves', params={'includeGuids': '1'}).json()['MediaContainer']['Metadata']
-				for episode in episode_info:
-					if season_number != None and episode['parentIndex'] != season_number:
-						continue
-					if episode_number != None and episode['index'] != episode_number:
-						continue
-
-					if verbose == True: print(f'		S{episode["parentIndex"]}E{episode["index"]} - {episode["title"]}')
-					try:
-						response = method(type='episode', data=episode, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-					except KeyboardInterrupt:
-						_leave(**exit_args)
+						if season_number != None:
+							break
 					else:
+						if season_number != None:
+							return 'Season not found'
+
+					#process episodes
+					episode_info = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}/allLeaves', params={'includeGuids': '1'}).json()['MediaContainer']['Metadata']
+					for episode in episode_info:
+						if season_number != None and episode['parentIndex'] != season_number:
+							continue
+						if episode_number != None and episode['index'] != episode_number:
+							continue
+
+						if verbose == True: print(f'		S{episode["parentIndex"]}E{episode["index"]} - {episode["title"]}')
+						response = method(type='episode', data=episode, watched_map=watched_map, timestamp_map=timestamp_map, **args)
 						if isinstance(response, str): return response
 						else: result_json.append(episode['ratingKey'])
 
-					if episode_number != None:
+						if episode_number != None:
+							break
+					else:
+						if episode_number != None:
+							return 'Episode not found'
+
+					if series_name != None:
 						break
 				else:
-					if episode_number != None:
-						return 'Episode not found'
+					if series_name != None:
+						return 'Series not found'
 
-				if series_name != None:
-					break
-			else:
-				if series_name != None:
-					return 'Series not found'
+			elif lib['type'] == 'artist':
+				for artist in lib_output:
+					if artist_name != None and artist['title'] != artist_name:
+						continue
 
-		elif lib['type'] == 'artist':
-			for artist in lib_output:
-				if artist_name != None and artist['title'] != artist_name:
-					continue
-
-				album_info = ssn.get(f'{base_url}{artist["key"]}', params={'includeGuids': '1'})
-				if album_info.status_code != 200: continue
-				album_info = album_info.json()['MediaContainer']['Metadata']
-				if verbose == True: print(f'	{artist["title"]}')
-				#process artist
-				artist_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
-				try:
+					album_info = ssn.get(f'{base_url}{artist["key"]}', params={'includeGuids': '1'})
+					if album_info.status_code != 200: continue
+					album_info = album_info.json()['MediaContainer'].get('Metadata',[])
+					if verbose == True: print(f'	{artist["title"]}')
+					#process artist
+					artist_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
 					response = method(type='artist', data=artist_info, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-				except KeyboardInterrupt:
-					_leave(**exit_args)
-				else:
 					if isinstance(response, str): return response
 					else: result_json.append(artist['ratingKey'])
 
-				#process albums
-				for album in album_info:
-					if album_name != None and album['title'] != album_name:
-						continue
+					#process albums
+					for album in album_info:
+						if album_name != None and album['title'] != album_name:
+							continue
 
-					try:
 						response = method(type='album', data=album, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-					except KeyboardInterrupt:
-						_leave(**exit_args)
-					else:
 						if isinstance(response, str): return response
 						else: result_json.append(album['ratingKey'])
 
-					if album_name != None:
-						break
-				else:
-					if album_name != None:
-						return 'Album not found'
-
-				#process tracks
-				track_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}/allLeaves', params={'includeGuids': '1'}).json()['MediaContainer']['Metadata']
-				for track in track_info:
-					if album_name != None and track['parentTitle'] != album_name:
-						continue
-					if track_name != None and track['title'] != track_name:
-						continue
-
-					if verbose == True: print(f'		D{track["parentIndex"]}T{track["index"]} - {track["title"]}')
-					try:
-						response = method(type='track', data=track, watched_map=watched_map, timestamp_map=timestamp_map, **args)
-					except KeyboardInterrupt:
-						_leave(**exit_args)
+						if album_name != None:
+							break
 					else:
+						if album_name != None:
+							return 'Album not found'
+
+					#process tracks
+					track_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}/allLeaves', params={'includeGuids': '1'}).json()['MediaContainer'].get('Metadata',[])
+					for track in track_info:
+						if album_name != None and track['parentTitle'] != album_name:
+							continue
+						if track_name != None and track['title'] != track_name:
+							continue
+
+						if verbose == True: print(f'		D{track["parentIndex"]}T{track["index"]} - {track["title"]}')
+						response = method(type='track', data=track, watched_map=watched_map, timestamp_map=timestamp_map, **args)
 						if isinstance(response, str): return response
 						else: result_json.append(track['ratingKey'])
 
-					if track_name != None:
+						if track_name != None:
+							break
+					else:
+						if track_name != None:
+							return 'Track not found'
+
+					if artist_name != None:
 						break
 				else:
-					if track_name != None:
-						return 'Track not found'
+					if artist_name != None:
+						return 'Artist not found'
 
-				if artist_name != None:
-					break
 			else:
-				if artist_name != None:
-					return 'Artist not found'
+				print('	Library not supported')
 
+			if library_name != None:
+				break
 		else:
-			print('	Library not supported')
-
-		if library_name != None:
-			break
-	else:
-		if library_name != None:
-			return 'Library not found'
+			if library_name != None:
+				return 'Library not found'
+	except Exception as e:
+		_leave(**exit_args, e=e)
 
 	#save the database
 	db.commit()
