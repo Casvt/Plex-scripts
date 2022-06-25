@@ -720,7 +720,7 @@ def plex_exporter_importer(
 							return 'Album not found'
 
 					#process tracks
-					track_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}/allLeaves', params={'includeGuids': '1'}).json()['MediaContainer']['Metadata']
+					track_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}/allLeaves', params={'includeGuids': '1'}).json()['MediaContainer'].get('Metadata',[])
 					for track in track_info:
 						if album_name != None and track['parentTitle'] != album_name:
 							continue
