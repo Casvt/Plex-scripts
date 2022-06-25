@@ -18,18 +18,27 @@ plex_api_token = ''
 #Hardcode the folder where the plex database is in
 #Leave empty unless really needed
 database_folder = ''
+plex_user = 'plex'
+plex_group = 'plex'
 
-from os import getenv, path
+from os import getenv, path, chmod, chown, makedirs, listdir
 from sqlite3 import connect
 from re import findall
 from datetime import datetime
 from time import perf_counter
+from pwd import getpwnam
+from grp import getgrnam
 
 # Environmental Variables
 plex_ip = getenv('plex_ip', plex_ip)
 plex_port = getenv('plex_port', plex_port)
 plex_api_token = getenv('plex_api_token', plex_api_token)
+database_folder = getenv('database_folder', database_folder)
+plex_user = getenv('plex_user', plex_user)
+plex_group = getenv('plex_group', plex_group)
 base_url = f"http://{plex_ip}:{plex_port}"
+plex_user = getpwnam(plex_user).pw_uid
+plex_group = getgrnam(plex_group).gr_gid
 
 media_types = {
 	'movie': (
@@ -45,7 +54,7 @@ media_types = {
 			rating_key TEXT UNIQUE,
 			guid TEXT UNIQUE,
 			updated_at INTEGER,
-			title TEXT NOT NULL,
+			title TEXT,
 			titleSort TEXT,
 			originalTitle TEXT,
 			originallyAvailableAt TEXT,
@@ -59,6 +68,8 @@ media_types = {
 			Director TEXT,
 			Collection TEXT,
 			watched_status TEXT,
+			hash TEXT,
+			chapter_thumbnails BLOB,
 			poster BLOB,
 			art BLOB
 		);
@@ -77,7 +88,7 @@ media_types = {
 			rating_key TEXT UNIQUE,
 			guid TEXT UNIQUE,
 			updated_at INTEGER,
-			title TEXT NOT NULL,
+			title TEXT,
 			titleSort TEXT,
 			originalTitle TEXT,
 			originallyAvailableAt TEXT,
@@ -103,7 +114,7 @@ media_types = {
 			rating_key TEXT UNIQUE,
 			guid TEXT UNIQUE,
 			updated_at INTEGER,
-			title TEXT NOT NULL,
+			title TEXT,
 			summary TEXT,
 			poster BLOB,
 			art BLOB
@@ -123,7 +134,7 @@ media_types = {
 			rating_key TEXT UNIQUE,
 			guid TEXT UNIQUE,
 			updated_at INTEGER,
-			title TEXT NOT NULL,
+			title TEXT,
 			titleSort TEXT,
 			originallyAvailableAt TEXT,
 			contentRating INTEGER,
@@ -134,6 +145,8 @@ media_types = {
 			intro_start INTEGER,
 			intro_end INTEGER,
 			watched_status TEXT,
+			hash TEXT,
+			chapter_thumbnails BLOB,
 			poster BLOB,
 			art BLOB
 		);
@@ -150,7 +163,7 @@ media_types = {
 			rating_key TEXT UNIQUE,
 			guid TEXT UNIQUE,
 			updated_at INTEGER,
-			title TEXT NOT NULL,
+			title TEXT,
 			titleSort TEXT,
 			summary TEXT,
 			Genre TEXT,
@@ -177,7 +190,7 @@ media_types = {
 			rating_key TEXT UNIQUE,
 			guid TEXT UNIQUE,
 			updated_at INTEGER,
-			title TEXT NOT NULL,
+			title TEXT,
 			titleSort TEXT,
 			originallyAvailableAt TEXT,
 			contentRating INTEGER,
@@ -205,7 +218,7 @@ media_types = {
 			rating_key TEXT UNIQUE,
 			guid TEXT UNIQUE,
 			updated_at INTEGER,
-			title TEXT NOT NULL,
+			title TEXT,
 			originalTitle TEXT,
 			contentRating INTEGER,
 			userRating INTEGER,
@@ -227,8 +240,9 @@ def _leave(db, plex_db=None):
 
 def _export(
 		type: str, data: dict, ssn, cursor, user_data: tuple, watched_map: dict, timestamp_map: dict,
-		target_metadata: bool, target_watched: bool, target_intro_markers: bool,
-		target_poster: bool, target_episode_poster: bool, target_art: bool, target_episode_art: bool
+		target_metadata: bool, target_watched: bool, target_intro_markers: bool, target_chapter_thumbnail: bool,
+		target_poster: bool, target_episode_poster: bool, target_art: bool, target_episode_art: bool,
+		database_folder=None, hash_map=None
 	):
 	user_ids, user_tokens = user_data
 
@@ -251,8 +265,8 @@ def _export(
 	if not 'Guid' in data: return
 
 	#request certain media again when we need it's metadata (lib output doesn't show all)
-	if (target_metadata == True and type in ('movie','show','episode','artist','album','track')) or (target_intro_markers == True and type == 'episode'):
-		media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'includeGuids': '1', 'includeMarkers': '1'})
+	if (target_metadata == True and type != 'season') or (target_intro_markers == True and type == 'episode') or (target_chapter_thumbnail == True and type in ('movie','episode')):
+		media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'includeGuids': '1', 'includeMarkers': '1', 'includeChapters': '1'})
 		if media_info.status_code != 200: return
 		media_info = media_info.json()['MediaContainer']['Metadata'][0]
 	else:
@@ -280,7 +294,7 @@ def _export(
 		db_keys.append('watched_status')
 		db_watched = ['_admin',str(media_info.get('viewOffset', 'viewCount' in media_info))]
 		for user_id, user_token in zip(user_ids, user_tokens):
-			user_watched = watched_map.get(user_token, {}).get(rating_key, '')
+			user_watched = str(watched_map.get(user_token, {}).get(rating_key, ''))
 			if user_watched == '': continue
 			db_watched += [user_id, user_watched]
 		db_values.append(",".join(db_watched))
@@ -292,6 +306,15 @@ def _export(
 				db_keys += ['intro_start','intro_end']
 				db_values += [marker['startTimeOffset'], marker['endTimeOffset']]
 				break
+
+	if target_chapter_thumbnail == True and type in ('movie','episode'):
+		hash = hash_map[rating_key]
+		bundle = path.join(path.dirname(path.dirname(database_folder)), 'Media', 'localhost', hash[0], f'{hash[1:]}.bundle', 'Contents', 'Chapters')
+		# #check if media doesn't already have autogenerated thumbs and if hash matches
+		if path.isdir(bundle):
+			db_keys.append('hash','chapter_thumbnails')
+			db_values.append(hash)
+			db_values.append((b'\0' * 20).join(map(lambda c: open(path.join(bundle, c), 'rb').read(), listdir(bundle))))
 
 	if (target_poster == True and type in ('movie','show','season','artist','album')) or (target_episode_poster == True and type == 'episode'):
 		if 'thumb' in media_info:
@@ -318,9 +341,9 @@ def _export(
 
 def _import(
 		type: str, data: dict, ssn, cursor, media_lib_id: str, user_data: tuple, watched_map: dict, timestamp_map: dict,
-		target_metadata: bool, target_watched: bool, target_intro_markers: bool,
+		target_metadata: bool, target_watched: bool, target_intro_markers: bool, target_chapter_thumbnail: bool,
 		target_poster: bool, target_episode_poster: bool, target_art: bool, target_episode_art: bool,
-		plex_cursor=None
+		plex_cursor=None, database_folder=None, hash_map=None
 	):
 	#import different data based on the type
 	if type in media_types:
@@ -342,7 +365,7 @@ def _import(
 
 	#find media in database
 	guid = str(media_info['Guid'])
-	cursor.execute(f"SELECT * FROM {type} WHERE guid = ?", [guid])
+	cursor.execute(f"SELECT * FROM {type} WHERE guid = ?", (guid))
 	target = cursor.fetchone()
 	if target == None: return
 	cursor.execute(f"SELECT * FROM {type} LIMIT 1;")
@@ -361,7 +384,7 @@ def _import(
 
 		#build the payload that sets all the values
 		for option, value in zip(target_keys[3:], target[3:]):
-			if option in ('poster','art','watched_status','intro_start','intro_end'): continue
+			if option in ('poster','art','watched_status','intro_start','intro_end','hash'): continue
 			elif option[0].isupper():
 				#list of labels
 				value = value.split(",")
@@ -387,7 +410,7 @@ def _import(
 	if 'art' in target_keys and ((type != 'episode' and target_art == True) or (type == 'episode' and target_episode_art == True)):
 		ssn.post(f'{base_url}/library/metadata/{rating_key}/arts', data=target[target_keys.index('art')])
 
-	if 'watched_status' in target_keys and target_watched == True:
+	if all(('watched_status' in target_keys, target_watched == True)):
 		watched_info = target[target_keys.index('watched_status')].split(',')
 		for user, watched_state in zip(watched_info[::2], watched_info[1::2]):
 			if user == '_admin': user_token = plex_api_token
@@ -404,7 +427,7 @@ def _import(
 				#mark partially watched
 				ssn.get(f'{base_url}/:/progress', params={'identifier': 'com.plexapp.plugins.library', 'key': rating_key, 'time': watched_state, 'state': 'stopped', 'X-Plex-Token': user_token})
 
-	if 'intro_start' in target_keys and 'intro_end' in target_keys and target_intro_markers == True:
+	if all(((k in target_keys for k in ('intro_start', 'intro_end')), target_intro_markers == True)):
 		#check if media already has intro marker
 		plex_cursor.execute(f"SELECT * FROM taggings WHERE text = 'intro' AND metadata_item_id = '{rating_key}';")
 		if plex_cursor.fetchone() == None:
@@ -424,6 +447,27 @@ def _import(
 			plex_cursor.execute(f"UPDATE taggings SET time_offset = '{target[target_keys.index('intro_start')]}' WHERE text = 'intro' AND metadata_item_id = '{rating_key}';")
 			plex_cursor.execute(f"UPDATE taggings SET end_time_offset = '{target[target_keys.index('intro_end')]}' WHERE text = 'intro' AND metadata_item_id = '{rating_key}';")
 
+	if all(((k in target_keys for k in ('hash','chapter_thumbnails')), target_chapter_thumbnail == True)):
+		hash = hash_map[rating_key]
+		bundle = path.join(path.dirname(path.dirname(database_folder)), 'Media', 'localhost', hash[0], f'{hash[1:]}.bundle', 'Contents', 'Chapters')
+		#check if media doesn't already have autogenerated thumbs and if hash matches
+		if all((target[target_keys.index('hash')] == hash, not path.isdir(bundle))):
+			thumbs = target[target_keys.index('chapter_thumbnails')].split(b'\0' * 20)
+			#create folder path to put thumbs in
+			bundle = path.dirname(path.dirname(database_folder))
+			for folder in ('Media', 'localhost', hash[0], f'{hash[1:]}.bundle', 'Contents', 'Chapters'):
+				bundle = path.join(bundle, folder)
+				makedirs(bundle)
+				chmod(bundle, 0o755)
+				chown(bundle, plex_user, plex_group)
+
+			#put all thumbs in created folder
+			for index, thumb in enumerate(thumbs):
+				chapter_file = path.join(bundle, f'chapter{index+1}.jpg')
+				with open(chapter_file, 'wb') as f:
+					f.write(thumb)
+				chmod(chapter_file, 0o644)
+				chown(bundle, plex_user, plex_group)
 	return
 
 def _reset(
@@ -470,6 +514,7 @@ def plex_exporter_importer(
 	#check for illegal arg parsing
 	if not type in ('import','export','reset'):
 		return 'Invalid value for "type"'
+	#setup db location
 	if type == 'export':
 		if path.isdir(location):
 			database_file = path.join(location, f'{path.splitext(__file__)[0]}.db')
@@ -491,21 +536,6 @@ def plex_exporter_importer(
 		else:
 			return 'Location not found'
 
-		if 'intro_marker' in process:
-			#importing intro markers requires root and access to target plex database file
-			from os import geteuid
-			if geteuid() != 0:
-				return 'Intro Marker importing is requested but script is not run as root'
-
-			#get location to database file
-			if database_folder == '':
-				db_folder = [s['value'] for s in ssn.get(f'{base_url}/:/prefs').json()['MediaContainer']['Setting'] if s['id'] == 'ButlerDatabaseBackupPath'][0]
-			db_file = path.join(db_folder, 'com.plexapp.plugins.library.db')
-			if not path.isfile(db_file):
-				return 'Intro Marker importing is requested but script is not run on target plex server, or value of database_folder is invalid'
-
-			#setup db connection
-			plex_db = connect(db_file)
 
 	elif type == 'reset':
 		if path.isdir(location):
@@ -515,6 +545,29 @@ def plex_exporter_importer(
 		else:
 			return 'Location not found'
 
+	#setup connection to plex db if needed
+	if ('intro_marker' in process and type == 'import') or ('chapter_thumbnail' in process and type in ('import','export')):
+		#importing intro markers or chapter thumbnails requires root and access to target plex database file
+		from os import geteuid
+		if ('intro_marker' in process or ('chapter_thumbnail' in process and type == 'import')) and geteuid() != 0:
+			return 'Intro Marker- or Chapter Thumbnail importing or Chapter Thumbnail exporting is requested but script is not run as root'
+
+		#get location to database file
+		database_root = database_folder or [s['value'] for s in ssn.get(f'{base_url}/:/prefs').json()['MediaContainer']['Setting'] if s['id'] == 'ButlerDatabaseBackupPath'][0]
+		db_file = path.join(database_root, 'com.plexapp.plugins.library.db')
+		if not path.isfile(db_file):
+			return 'Intro Marker- or Chapter Thumbnail importing or Chapter Thumbnail exporting is requested but script is not run on target plex server, or value of database_folder is invalid'
+
+		#setup db connection
+		plex_db = connect(db_file)
+		plex_cursor = plex_db.cursor()
+
+		#create hash_map if needed
+		if 'chapter_thumbnail' in process:
+			plex_cursor.execute("SELECT id, hash FROM metadata_items;")
+			hash_map = dict(map(lambda i: (str(i[0]), i[1]), plex_cursor.fetchall()))
+
+	#check for illegal arg parsing
 	if all == True:
 		print(f'{type.capitalize()}ing complete plex library')
 		lib_target_specifiers = (library_name,movie_name,series_name,season_number,episode_number,artist_name,album_name,track_name)
@@ -564,12 +617,16 @@ def plex_exporter_importer(
 		args['target_episode_art'] = 'episode_art' in process
 		args['target_watched'] = 'watched_status' in process
 		args['target_intro_markers'] = 'intro_marker' in process
+		args['target_chapter_thumbnail'] = 'chapter_thumbnail' in process
 	exit_args = {
 		'db': db
 	}
-	if type == 'import' and 'intro_marker' in process:
-		args['plex_cursor'] = plex_db.cursor()
+	if type == 'import' and any(p in process for p in ('intro_marker','chapter_thumbnail')):
+		args['plex_cursor'] = plex_cursor
 		exit_args['plex_db'] = plex_db
+	if 'chapter_thumbnail' in process and type in ('export','import'):
+		args['hash_map'] = hash_map
+		args['database_folder'] = database_root
 
 	#start working on the media
 	sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
@@ -596,9 +653,7 @@ def plex_exporter_importer(
 				user_lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'X-Plex-Token': user_token, 'type': '4' if lib['type'] == 'show' else '1'})
 				if user_lib_output.status_code != 200: continue
 				user_lib_output = user_lib_output.json()['MediaContainer'].get('Metadata', [])
-				watched_map[user_token] = {}
-				for media in user_lib_output:
-					watched_map[user_token][media['ratingKey']] = str(media.get('viewOffset', 'viewCount' in media))
+				watched_map[user_token] = dict(map(lambda m: (m['ratingKey'], m.get('viewOffset','viewCount' in m)), user_lib_output))
 
 		if type == 'export' and not lib['type'] in timestamp_map:
 			if lib['type'] == 'show':
@@ -609,10 +664,8 @@ def plex_exporter_importer(
 				lib_types = [lib['type']]
 
 			for lib_type in lib_types:
-				timestamp_map[lib_type] = {}
 				cursor.execute(f"SELECT rating_key, updated_at FROM {lib_type};")
-				for time_key, time_stamp in cursor.fetchall():
-					timestamp_map[lib_type][time_key] = time_stamp
+				timestamp_map[lib_type] = dict(cursor.fetchall())
 
 		if lib['type'] == 'movie':
 			for movie in lib_output:
@@ -779,7 +832,7 @@ def plex_exporter_importer(
 
 	#save the database
 	db.commit()
-	if 'intro_marker' in process and type == 'import':
+	if type == 'import' and ('intro_marker' in process or 'chapter_thumbnail' in process):
 		plex_db.commit()
 
 	return result_json
@@ -797,7 +850,7 @@ if __name__ == '__main__':
 	epilog = """-------------------
 EPILOG
 
-If you want to use the "intro_marker" feature when importing, it is REQUIRED that the script is run on the server on which the targeted plex server is too and that the script is run using the root user (administrative user).
+If you want to use the "intro_marker" or "chapter_thumbnail" feature when importing, it is REQUIRED that the script is run on the server on which the targeted plex server is too and that the script is run using the root user (administrative user).
 
 -L/--Location
 	When exporting, you might want to set a different folder to put the database file in (default is script folder),
@@ -810,7 +863,7 @@ If you want to use the "intro_marker" feature when importing, it is REQUIRED tha
 """
 	parser = ArgumentParser(formatter_class=RawDescriptionHelpFormatter, description='Export plex metadata to a database that can then be imported back later', epilog=epilog)
 	parser.add_argument('-t','--Type', choices=['import','export','reset'], required=True, type=str, help='Either export/import plex metadata or reset import (unlock all fields)')
-	parser.add_argument('-p','--Process', choices=['metadata','watched_status','poster','episode_poster','art','episode_art','intro_marker'], help='EXPORT/IMPORT ONLY: Select what to export/import; this argument can be given multiple times to select multiple things', action='append', required=True)
+	parser.add_argument('-p','--Process', choices=['metadata','watched_status','poster','episode_poster','art','episode_art','intro_marker','chapter_thumbnail'], help='EXPORT/IMPORT ONLY: Select what to export/import; this argument can be given multiple times to select multiple things', action='append', required=True)
 	parser.add_argument('-L','--Location', type=str, help='SEE EPILOG', default='.')
 	parser.add_argument('-v','--Verbose', help='Make script more verbose', action='store_true')
 
