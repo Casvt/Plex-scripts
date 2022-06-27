@@ -18,27 +18,31 @@ plex_api_token = ''
 #Hardcode the folder where the plex database is in
 #Leave empty unless really needed
 database_folder = ''
-plex_user = 'plex'
-plex_group = 'plex'
+plex_linux_user = 'plex'
+plex_linux_group = 'plex'
 
-from os import getenv, path, chmod, chown, makedirs, listdir
+from sys import platform
+from os import getenv, path, listdir
 from sqlite3 import connect
 from re import findall
 from datetime import datetime
 from time import perf_counter
 from pwd import getpwnam
 from grp import getgrnam
+linux_platform = platform == 'linux'
+if linux_platform == True:
+	from os import chmod, chown, makedirs
 
 # Environmental Variables
 plex_ip = getenv('plex_ip', plex_ip)
 plex_port = getenv('plex_port', plex_port)
 plex_api_token = getenv('plex_api_token', plex_api_token)
 database_folder = getenv('database_folder', database_folder)
-plex_user = getenv('plex_user', plex_user)
-plex_group = getenv('plex_group', plex_group)
+plex_linux_user = getenv('plex_linux_user', plex_linux_user)
+plex_linux_group = getenv('plex_linux_group', plex_linux_group)
 base_url = f"http://{plex_ip}:{plex_port}"
-plex_user = getpwnam(plex_user).pw_uid
-plex_group = getgrnam(plex_group).gr_gid
+plex_linux_user = getpwnam(plex_linux_user).pw_uid
+plex_linux_group = getgrnam(plex_linux_group).gr_gid
 
 #media types tuple content: metadata keys, plex type id, table creation command, plex children type id, plex children types
 media_types = {
@@ -489,7 +493,7 @@ def _import(
 				bundle = path.join(bundle, folder)
 				makedirs(bundle)
 				chmod(bundle, 0o755)
-				chown(bundle, plex_user, plex_group)
+				chown(bundle, plex_linux_user, plex_linux_group)
 
 			#put all thumbs in created folder
 			for index, thumb in enumerate(thumbs):
@@ -497,7 +501,7 @@ def _import(
 				with open(chapter_file, 'wb') as f:
 					f.write(thumb)
 				chmod(chapter_file, 0o644)
-				chown(bundle, plex_user, plex_group)
+				chown(bundle, plex_linux_user, plex_linux_group)
 	return
 
 def _reset(
@@ -546,6 +550,8 @@ def plex_exporter_importer(
 	#check for illegal arg parsing
 	if not type in process_types:
 		return 'Invalid value for "type"'
+	if platform == False and type == 'import' and 'chapter_thumbnails' in process:
+		return 'Importing chapter thumbnails on a non-linux system is not supported'
 	#setup db location
 	if type == 'export':
 		if path.isdir(location):
@@ -882,7 +888,14 @@ if __name__ == '__main__':
 	epilog = """-------------------
 EPILOG
 
-If you want to use the "intro_marker" or "chapter_thumbnail" feature when importing, it is REQUIRED that the script is run on the server on which the targeted plex server is too and that the script is run using the root user (administrative user).
+-p/--Process
+{p}
+
+	Notes:
+	1. Under the following situations, it is REQUIRED that the script is run on the server on which the targeted plex server is too and that the script is run using the root user (administrative user):
+		1. "intro_marker" when importing
+		2. "chapter_thumbnail" when importing
+	2. Importing chapter thumbnails on a non-linux system is not possible.
 
 -L/--Location
 	When using the script, you might want to influence how the script handles the database file,
@@ -892,7 +905,7 @@ If you want to use the "intro_marker" or "chapter_thumbnail" feature when import
 	When exporting and giving a path to a folder, the database file will be put in that folder.
 	When exporting and giving a path to a database file, that database file will be used to put the data in or will be updated if data is already in it (STRONGLY RECOMMENDED IF POSSIBLE)
 	When importing and giving a path to a database file, that database file will be read and used as the source of the data that will be applied
-"""
+""".format(p="\n".join(map(lambda k: f'	{k[0]}: {k[1]}', process_summary.items())))
 	parser = ArgumentParser(formatter_class=RawDescriptionHelpFormatter, description='Export plex metadata to a database that can then be imported back later', epilog=epilog)
 	parser.add_argument('-t','--Type', choices=process_types, required=True, type=str, help='Either export/import plex metadata or reset import (unlock all fields)')
 	parser.add_argument('-p','--Process', choices=process_summary.keys(), help='EXPORT/IMPORT ONLY: Select what to export/import; this argument can be given multiple times to select multiple things', action='append', required=True)
