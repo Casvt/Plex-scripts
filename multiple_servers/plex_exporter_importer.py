@@ -72,6 +72,8 @@ media_types = {
 			Writer TEXT,
 			Director TEXT,
 			Collection TEXT,
+			languageOverride TEXT,
+			useOriginalTitle TEXT,
 			watched_status TEXT,
 			hash TEXT,
 			chapter_thumbnails BLOB,
@@ -106,6 +108,13 @@ media_types = {
 			summary TEXT,
 			Genre TEXT,
 			Collection TEXT,
+			episodeSort TEXT,
+			autoDeletionItemPolicyUnwatchedLibrary TEXT,
+			autoDeletionItemPolicyWatchedLibrary TEXT,
+			flattenSeasons TEXT,
+			showOrdering TEXT,
+			languageOverride TEXT,
+			useOriginalTitle TEXT,
 			poster BLOB,
 			art BLOB
 		);
@@ -185,6 +194,7 @@ media_types = {
 			Country TEXT,
 			Collection TEXT,
 			Similar TEXT,
+			albumSort TEXT,
 			poster BLOB,
 			art BLOB
 		);
@@ -250,6 +260,7 @@ media_types = {
 }
 process_summary = {
 	'metadata': "The standard plex metadata like title, summary, tags and more.",
+	'advanced_metadata': "The advanced plex settings (metadata) for media",
 	'watched_status': "The watched status of the media for every user: watched, not watched or partially watched.",
 	'poster': "The (custom) poster of movies, shows, seasons, artists and albums.",
 	'episode_poster': "The (custom) poster of episodes.",
@@ -259,22 +270,23 @@ process_summary = {
 	'chapter_thumbnail': "The by plex automatically generated thumbnails for chapters."
 }
 process_types = ('import','export','reset')
-metadata_skip_keys = ('rating_key','guid','updated_at','poster','art','watched_status','intro_start','intro_end','hash')
+advanced_metadata_keys = ('languageOverride','useOriginalTitle','episodeSort','autoDeletionItemPolicyUnwatchedLibrary','autoDeletionItemPolicyWatchedLibrary','flattenSeasons','showOrdering','albumSort')
+metadata_skip_keys = ('rating_key','guid','updated_at','poster','art','watched_status','intro_start','intro_end','hash') + advanced_metadata_keys
 
 def _leave(db, plex_db=None, e=None):
-	if e != None:
-		print('AN ERROR OCCURED:')
-		print(e)
 	print('Shutting down...')
 	db.commit()
 	if plex_db != None:
 		plex_db.commit()
 	print('Progress saved')
+	if e != None:
+		print('AN ERROR OCCURED. ALL YOUR PROGRESS IS SAVED. PLEASE SHARE THE FOLLOWING WITH THE DEVELOPER:')
+		raise e
 	exit(0)
 
 def _export(
 		type: str, data: dict, ssn, cursor, user_data: tuple, watched_map: dict, timestamp_map: dict,
-		target_metadata: bool, target_watched: bool, target_intro_markers: bool, target_chapter_thumbnail: bool,
+		target_metadata: bool, target_advanced_metadata: bool, target_watched: bool, target_intro_markers: bool, target_chapter_thumbnail: bool,
 		target_poster: bool, target_episode_poster: bool, target_art: bool, target_episode_art: bool,
 		database_folder=None, hash_map=None
 	):
@@ -299,8 +311,11 @@ def _export(
 	if not 'Guid' in data: return
 
 	#request certain media again when we need it's metadata (lib output doesn't show all)
-	if (target_metadata == True and type != 'season') or (target_intro_markers == True and type == 'episode') or (target_chapter_thumbnail == True and type in ('movie','episode')):
-		media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'includeGuids': '1', 'includeMarkers': '1', 'includeChapters': '1'})
+	if (target_metadata == True and type != 'season') \
+	or (target_intro_markers == True and type == 'episode') \
+	or (target_chapter_thumbnail == True and type in ('movie','episode')) \
+	or (target_advanced_metadata == True and type in ('movie','show','artist')):
+		media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'includeGuids': '1', 'includeMarkers': '1', 'includeChapters': '1', 'includePreferences': '1'})
 		if media_info.status_code != 200: return
 		media_info = media_info.json()['MediaContainer']['Metadata'][0]
 	else:
@@ -323,6 +338,10 @@ def _export(
 			if value != None:
 				db_keys.append(key)
 				db_values.append(value)
+
+	if target_advanced_metadata == True and type in ('movie','show','artist'):
+		db_keys += [s['id'] for s in media_info['Preferences']['Setting']]
+		db_values += [s['value'] for s in media_info['Preferences']['Setting']]
 
 	if target_watched == True and type in ('movie','episode'):
 		db_keys.append('watched_status')
@@ -375,7 +394,7 @@ def _export(
 
 def _import(
 		type: str, data: dict, ssn, cursor, media_lib_id: str, user_data: tuple, watched_map: dict, timestamp_map: dict,
-		target_metadata: bool, target_watched: bool, target_intro_markers: bool, target_chapter_thumbnail: bool,
+		target_metadata: bool, target_advanced_metadata: bool, target_watched: bool, target_intro_markers: bool, target_chapter_thumbnail: bool,
 		target_poster: bool, target_episode_poster: bool, target_art: bool, target_episode_art: bool,
 		plex_cursor=None, database_folder=None, hash_map=None
 	):
@@ -399,7 +418,7 @@ def _import(
 
 	#find media in database
 	guid = str(media_info['Guid'])
-	cursor.execute(f"SELECT * FROM {type} WHERE guid = ?", (guid))
+	cursor.execute(f"SELECT * FROM {type} WHERE guid = ?", [guid])
 	target = cursor.fetchone()
 	if target == None: return
 	cursor.execute(f"SELECT * FROM {type} LIMIT 1;")
@@ -419,6 +438,7 @@ def _import(
 			if option in metadata_skip_keys: continue
 			elif option[0].isupper():
 				#list of labels
+				value = value or ''
 				value = value.split(",")
 				lower_option = option.lower()
 				#add tags
@@ -435,6 +455,10 @@ def _import(
 
 		#upload to plex
 		ssn.put(f'{base_url}/library/sections/{media_lib_id}/all', params=payload)
+
+	if target_advanced_metadata == True and type in ('movie','show','artist'):
+		payload = {o: v for o, v in zip(target_keys, target) if o in advanced_metadata_keys}
+		ssn.put(f'{base_url}/library/metadata/{rating_key}/prefs', params=payload)
 
 	if 'poster' in target_keys and ((type != 'episode' and target_poster == True) or (type == 'episode' and target_episode_poster == True)):
 		ssn.post(f'{base_url}/library/metadata/{rating_key}/posters', data=target[target_keys.index('poster')])
@@ -685,6 +709,7 @@ def plex_exporter_importer(
 	}
 	if type in ('export','import'):
 		args['user_data'] = user_data
+		args['target_advanced_metadata'] = 'advanced_metadata' in process
 		args['target_episode_poster'] = 'episode_poster' in process
 		args['target_episode_art'] = 'episode_art' in process
 		args['target_watched'] = 'watched_status' in process
@@ -866,7 +891,10 @@ def plex_exporter_importer(
 			if library_name != None:
 				return 'Library not found'
 	except Exception as e:
-		_leave(**exit_args, e=e)
+		if 'has no column named' in str(e):
+			_leave(**exit_args, e='Database file is too old, please delete the file and export to a new one')
+		else:
+			_leave(**exit_args, e=e)
 
 	#save the database
 	db.commit()
