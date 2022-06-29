@@ -256,6 +256,107 @@ media_types = {
 		""",
 		10,
 		['track']
+	),
+	'server': (
+		(
+			'FriendlyName','sendCrashReports','PushNotificationsEnabled','logDebug','LogVerbose','ButlerUpdateChannel',
+			'ManualPortMappingMode', 'ManualPortMappingPort', 'WanTotalMaxUploadRate', 'WanPerStreamMaxUploadRate',
+			'FSEventLibraryUpdatesEnabled', 'FSEventLibraryPartialScanEnabled', 'watchMusicSections', 'ScheduledLibraryUpdatesEnabled', 'ScheduledLibraryUpdateInterval', 'autoEmptyTrash', 'allowMediaDeletion', 'OnDeckWindow', 'OnDeckLimit', 'OnDeckIncludePremieres', 'SmartShuffleMusic', 'MusicSeparateAlbumTypes', 'ScannerLowPriority', 'GenerateBIFBehavior', 'GenerateIntroMarkerBehavior', 'GenerateChapterThumbBehavior', 'LoudnessAnalysisBehavior', 'MusicAnalysisBehavior', 'LocationVisibility',
+			'EnableIPv6', 'secureConnections', 'customCertificatePath', 'customCertificateKey', 'customCertificateDomain', 'PreferredNetworkInterface', 'DisableTLSv1_0', 'GdmEnabled', 'WanPerUserStreamCount', 'LanNetworksBandwidth', 'MinutesAllowedPaused', 'TreatWanIpAsLocal', 'RelayEnabled', 'customConnections', 'allowedNetworks', 'WebHooksEnabled',
+			'TranscoderQuality', 'TranscoderTempDirectory', 'TranscoderThrottleBuffer', 'TranscoderH264BackgroundPreset', 'TranscoderToneMapping', 'TranscoderCanOnlyRemuxVideo', 'HardwareAcceleratedCodecs', 'HardwareAcceleratedEncoders', 'TranscodeCountLimit',
+			'DlnaEnabled', 'DlnaClientPreferences', 'DlnaReportTimeline', 'DlnaDefaultProtocolInfo', 'DlnaDeviceDiscoveryInterval', 'DlnaAnnouncementLeaseTime', 'DlnaDescriptionIcons',
+			'ButlerStartHour', 'ButlerEndHour', 'ButlerTaskBackupDatabase', 'ButlerDatabaseBackupPath', 'ButlerTaskOptimizeDatabase', 'ButlerTaskCleanOldBundles', 'ButlerTaskCleanOldCacheFiles', 'ButlerTaskRefreshLocalMedia', 'ButlerTaskRefreshLibraries', 'ButlerTaskUpgradeMediaAnalysis', 'ButlerTaskRefreshPeriodicMetadata', 'ButlerTaskDeepMediaAnalysis', 'ButlerTaskReverseGeocode', 'ButlerTaskGenerateAutoTags',
+			'CinemaTrailersType', 'CinemaTrailersFromLibrary', 'CinemaTrailersFromTheater', 'CinemaTrailersFromBluRay', 'CinemaTrailersPrerollID', 'GlobalMusicVideoPath'
+		),
+		-1,
+		"""
+		CREATE TABLE IF NOT EXISTS server (
+			machine_id TEXT,
+			FriendlyName TEXT,
+			sendCrashReports TEXT,
+			PushNotificationsEnabled TEXT,
+			logDebug TEXT,
+			LogVerbose TEXT,
+			ButlerUpdateChannel TEXT,
+			ManualPortMappingMode TEXT,
+			ManualPortMappingPort TEXT,
+			WanTotalMaxUploadRate TEXT,
+			WanPerStreamMaxUploadRate TEXT,
+			FSEventLibraryUpdatesEnabled TEXT,
+			FSEventLibraryPartialScanEnabled TEXT,
+			watchMusicSections TEXT,
+			ScheduledLibraryUpdatesEnabled TEXT,
+			ScheduledLibraryUpdateInterval TEXT,
+			autoEmptyTrash TEXT,
+			allowMediaDeletion TEXT,
+			OnDeckWindow TEXT,
+			OnDeckLimit TEXT,
+			OnDeckIncludePremieres TEXT,
+			SmartShuffleMusic TEXT,
+			MusicSeparateAlbumTypes TEXT,
+			ScannerLowPriority TEXT,
+			GenerateBIFBehavior TEXT,
+			GenerateIntroMarkerBehavior TEXT,
+			GenerateChapterThumbBehavior TEXT,
+			LoudnessAnalysisBehavior TEXT,
+			MusicAnalysisBehavior TEXT,
+			LocationVisibility TEXT,
+			EnableIPv6 TEXT,
+			secureConnections TEXT,
+			customCertificatePath TEXT,
+			customCertificateKey TEXT,
+			customCertificateDomain TEXT,
+			PreferredNetworkInterface TEXT,
+			DisableTLSv1_0 TEXT,
+			GdmEnabled TEXT,
+			WanPerUserStreamCount TEXT,
+			LanNetworksBandwidth TEXT,
+			MinutesAllowedPaused TEXT,
+			TreatWanIpAsLocal TEXT,
+			RelayEnabled TEXT,
+			customConnections TEXT,
+			allowedNetworks TEXT,
+			WebHooksEnabled TEXT,
+			TranscoderQuality TEXT,
+			TranscoderTempDirectory TEXT,
+			TranscoderThrottleBuffer TEXT,
+			TranscoderH264BackgroundPreset TEXT,
+			TranscoderToneMapping TEXT,
+			TranscoderCanOnlyRemuxVideo TEXT,
+			HardwareAcceleratedCodecs TEXT,
+			HardwareAcceleratedEncoders TEXT,
+			TranscodeCountLimit TEXT,
+			DlnaEnabled TEXT,
+			DlnaClientPreferences TEXT,
+			DlnaReportTimeline TEXT,
+			DlnaDefaultProtocolInfo TEXT,
+			DlnaDeviceDiscoveryInterval TEXT,
+			DlnaAnnouncementLeaseTime TEXT,
+			DlnaDescriptionIcons TEXT,
+			ButlerStartHour TEXT,
+			ButlerEndHour TEXT,
+			ButlerTaskBackupDatabase TEXT,
+			ButlerDatabaseBackupPath TEXT,
+			ButlerTaskOptimizeDatabase TEXT,
+			ButlerTaskCleanOldBundles TEXT,
+			ButlerTaskCleanOldCacheFiles TEXT,
+			ButlerTaskRefreshLocalMedia TEXT,
+			ButlerTaskRefreshLibraries TEXT,
+			ButlerTaskUpgradeMediaAnalysis TEXT,
+			ButlerTaskRefreshPeriodicMetadata TEXT,
+			ButlerTaskDeepMediaAnalysis TEXT,
+			ButlerTaskReverseGeocode TEXT,
+			ButlerTaskGenerateAutoTags TEXT,
+			CinemaTrailersType TEXT,
+			CinemaTrailersFromLibrary TEXT,
+			CinemaTrailersFromTheater TEXT,
+			CinemaTrailersFromBluRay TEXT,
+			CinemaTrailersPrerollID TEXT,
+			GlobalMusicVideoPath TEXT
+		)
+		""",
+		-1,
+		[]
 	)
 }
 process_summary = {
@@ -267,11 +368,12 @@ process_summary = {
 	'art': "The (custom) art of movies, shows, seasons, artists and albums.",
 	'episode_art': "The (custom) art of episodes.",
 	'intro_marker': "The intro marker of episodes, which describes the beginning and end of the intro.",
-	'chapter_thumbnail': "The by plex automatically generated thumbnails for chapters."
+	'chapter_thumbnail': "The by plex automatically generated thumbnails for chapters.",
+	'server_settings': "The settings of the server"
 }
 process_types = ('import','export','reset')
 advanced_metadata_keys = ('languageOverride','useOriginalTitle','episodeSort','autoDeletionItemPolicyUnwatchedLibrary','autoDeletionItemPolicyWatchedLibrary','flattenSeasons','showOrdering','albumSort')
-metadata_skip_keys = ('rating_key','guid','updated_at','poster','art','watched_status','intro_start','intro_end','hash') + advanced_metadata_keys
+metadata_skip_keys = ('rating_key','guid','updated_at','poster','art','watched_status','intro_start','intro_end','hash') + advanced_metadata_keys + media_types['server'][0]
 
 def _leave(db, plex_db=None, e=None):
 	print('Shutting down...')
@@ -299,6 +401,24 @@ def _export(
 		#unknown type of source
 		return 'Unknown source type when trying to extract data (internal error)'
 
+	#if requested, export server settings here and return function (server settings is a "special" case)
+	if type == 'server':
+		machine_id = ssn.get(f"{base_url}/").json()['MediaContainer']['machineIdentifier']
+		cursor.execute(f"DELETE FROM {type} WHERE machine_id = '{machine_id}'")
+		db_keys, db_values = ['machine_id'], [machine_id]
+		prefs = ssn.get(f'{base_url}/:/prefs').json()['MediaContainer']['Setting']
+		for pref in prefs:
+			if not pref['id'] in media_types['server'][0]: continue
+			db_keys.append(pref['id'])
+			db_values.append(pref['value'])
+		#write to the database
+		comm = f"""
+		INSERT INTO {type} ({",".join(db_keys)})
+		VALUES ({",".join(['?'] * len(db_keys))})
+		"""
+		cursor.execute(comm, db_values)
+		return
+
 	rating_key = data['ratingKey']
 
 	#skip media if it hasn't been edited since last time (or it isn't matched to any series)
@@ -307,7 +427,7 @@ def _export(
 		if updated_at == data.get('updatedAt',0):
 			return
 		else:
-			cursor.execute(f"DELETE FROM {type} WHERE rating_key = {rating_key}")
+			cursor.execute(f"DELETE FROM {type} WHERE rating_key = '{rating_key}'")
 	if not 'Guid' in data: return
 
 	#request certain media again when we need it's metadata (lib output doesn't show all)
@@ -405,6 +525,15 @@ def _import(
 		return 'Unknown source type when trying to import data (internal error)'
 	user_ids, user_tokens = user_data
 
+	if type == 'server':
+		machine_id = ssn.get(f"{base_url}/").json()['MediaContainer']['machineIdentifier']
+		cursor.execute(f"SELECT * FROM {type} WHERE machine_id = ?", [machine_id])
+		server_settings = cursor.fetchone()
+		if server_settings == None: return
+		payload = dict(zip(media_types[type][0], server_settings[1:]))
+		ssn.put(f'{base_url}/:/prefs', params=payload)
+		return
+
 	rating_key = data['ratingKey']
 	if not 'Guid' in data: return
 
@@ -428,7 +557,9 @@ def _import(
 	if target_metadata == True:
 		payload = {
 			'type': media_type,
-			'id': rating_key
+			'id': rating_key,
+			'thumb.locked': 1,
+			'art.locked': 1
 		}
 		if type == 'album':
 			payload['artist.id.value'] = data['parentRatingKey']
@@ -462,11 +593,9 @@ def _import(
 
 	if 'poster' in target_keys and ((type != 'episode' and target_poster == True) or (type == 'episode' and target_episode_poster == True)):
 		ssn.post(f'{base_url}/library/metadata/{rating_key}/posters', data=target[target_keys.index('poster')])
-		payload['thumb.locked'] = 1
 
 	if 'art' in target_keys and ((type != 'episode' and target_art == True) or (type == 'episode' and target_episode_art == True)):
 		ssn.post(f'{base_url}/library/metadata/{rating_key}/arts', data=target[target_keys.index('art')])
-		payload['art.locked'] = 1
 
 	if 'watched_status' in target_keys and target_watched == True:
 		watched_info = target[target_keys.index('watched_status')].split(',')
@@ -585,11 +714,12 @@ def plex_exporter_importer(
 			else:
 				print(f'Exporting to {database_file}')
 
-		elif path.isfile(location):
-			if not location.endswith('.db'):
-				return 'Invalid location value; file needs to have ".db" extension'
+		elif location.endswith('.db'):
 			database_file = location
-			print(f'Exporting to {database_file} (Updating)')
+			if path.isfile(location):
+				print(f'Exporting to {database_file} (Updating)')
+			else:
+				print(f'Exporting to {database_file}')
 
 		else:
 			return 'Location not found'
@@ -617,6 +747,8 @@ def plex_exporter_importer(
 	summary += ''.join([f'	{process_summary.get(process_entry, process_entry)}\n' for process_entry in process])
 	#what's targeted
 	summary += f'This is going to be done for '
+	if 'server_settings' in process: summary += 'your server'
+	if len(process) > 1: summary += ' and '
 	if all == True: summary += 'your complete plex library'
 	elif True in (all_movie, all_show, all_music):
 		targeted_libs = []
@@ -636,7 +768,7 @@ def plex_exporter_importer(
 			if album_name != None:
 				summary += f' -> Album {album_name}'
 				if track_name != None: summary += f' -> Track {track_name}'
-		else: summary += f'the library {library_name}'
+		elif not process == ['server_settings']: summary += f'the library {library_name}'
 	summary += '.'
 	print(summary)
 
@@ -668,7 +800,7 @@ def plex_exporter_importer(
 			return 'Both "all" and a target-specifier are set'
 
 	else:
-		if not True in all_target_specifiers and library_name == None:
+		if not True in all_target_specifiers and library_name == None and process != ['server_settings']:
 			return '"all" is set to False but no target-specifier is given'
 		if season_number != None and series_name == None:
 			return '"season_number" is set but not "series_name"'
@@ -722,8 +854,16 @@ def plex_exporter_importer(
 		args['plex_cursor'] = plex_cursor
 		exit_args['plex_db'] = plex_db
 
-	#start working on the media
+	#start working on the media/settings
 	try:
+		if 'server_settings' in process:
+			print('Server Settings')
+			if type == 'import':
+				response = method(type='server', data={}, watched_map=watched_map, timestamp_map=timestamp_map, media_lib_id=0, **args)
+			else:
+				response = method(type='server', data={}, watched_map=watched_map, timestamp_map=timestamp_map, **args)
+			if isinstance(response, str): return response
+
 		sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
 		for lib in sections:
 			if not (all == True \
@@ -972,9 +1112,7 @@ EPILOG
 	)
 	print(f'Time: {round(perf_counter() - start_time, 3)}s')
 	if not isinstance(response, list):
-		if response == 'Invalid location value; file needs to have ".db" extension':
-			parser.error('-L/--Location has a value that does not lead to a database file (.db)')
-		elif response == 'Both "all" and a target-specifier are set':
+		if response == 'Both "all" and a target-specifier are set':
 			parser.error('Both -a/--All and a target-specifier are set')
 		elif response == '"all" is set to False but no target-specifier is given':
 			parser.error('-a/--All is not set but also no target-specifier is set')
