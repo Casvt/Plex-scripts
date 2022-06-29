@@ -38,11 +38,12 @@ plex_ip = getenv('plex_ip', plex_ip)
 plex_port = getenv('plex_port', plex_port)
 plex_api_token = getenv('plex_api_token', plex_api_token)
 database_folder = getenv('database_folder', database_folder)
-plex_linux_user = getenv('plex_linux_user', plex_linux_user)
-plex_linux_group = getenv('plex_linux_group', plex_linux_group)
 base_url = f"http://{plex_ip}:{plex_port}"
-plex_linux_user = getpwnam(plex_linux_user).pw_uid
-plex_linux_group = getgrnam(plex_linux_group).gr_gid
+if linux_platform == True:
+	plex_linux_user = getenv('plex_linux_user', plex_linux_user)
+	plex_linux_group = getenv('plex_linux_group', plex_linux_group)
+	plex_linux_user = getpwnam(plex_linux_user).pw_uid
+	plex_linux_group = getgrnam(plex_linux_group).gr_gid
 
 #media types tuple content: metadata keys, plex type id, table creation command, plex children type id, plex children types
 media_types = {
