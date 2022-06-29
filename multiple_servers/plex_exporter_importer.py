@@ -27,10 +27,10 @@ from sqlite3 import connect
 from re import findall
 from datetime import datetime
 from time import perf_counter
-from pwd import getpwnam
-from grp import getgrnam
 linux_platform = platform == 'linux'
 if linux_platform == True:
+	from pwd import getpwnam
+	from grp import getgrnam
 	from os import chmod, chown, makedirs
 
 # Environmental Variables
