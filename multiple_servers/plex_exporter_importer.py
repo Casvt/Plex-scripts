@@ -748,8 +748,10 @@ def plex_exporter_importer(
 	summary += ''.join([f'	{process_summary.get(process_entry, process_entry)}\n' for process_entry in process])
 	#what's targeted
 	summary += f'This is going to be done for '
-	if 'server_settings' in process: summary += 'your server'
-	if len(process) > 1: summary += ' and '
+	if 'server_settings' in process:
+		summary += 'your server'
+		if len(process) > 1:
+			summary += ' and '
 	if all == True: summary += 'your complete plex library'
 	elif True in (all_movie, all_show, all_music):
 		targeted_libs = []
