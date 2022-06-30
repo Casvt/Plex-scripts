@@ -867,11 +867,11 @@ def plex_exporter_importer(
 
 		sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
 		for lib in sections:
-			if not (all == True \
+			if not (lib['type'] in media_types and (all == True \
 			or (library_name != None and lib['title'] == library_name) \
 			or (all_movie == True and lib['type'] == 'movie') \
 			or (all_show == True and lib['type'] == 'show') \
-			or (all_music == True and lib['type'] == 'artist')):
+			or (all_music == True and lib['type'] == 'artist'))):
 				#a specific library is targeted and this one is not it, so skip
 				continue
 
