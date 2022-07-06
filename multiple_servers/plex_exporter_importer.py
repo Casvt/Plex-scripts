@@ -52,7 +52,7 @@ media_types = {
 			'title', 'titleSort', 'originalTitle',
 			'originallyAvailableAt', 'contentRating', 'userRating',
 			'studio', 'tagline', 'summary',
-			'Genre', 'Writer', 'Director', 'Collection'
+			'Genre', 'Writer', 'Director'
 		),
 		1,
 		"""
@@ -72,7 +72,6 @@ media_types = {
 			Genre TEXT,
 			Writer TEXT,
 			Director TEXT,
-			Collection TEXT,
 			languageOverride TEXT,
 			useOriginalTitle TEXT,
 			watched_status TEXT,
@@ -90,7 +89,7 @@ media_types = {
 			'title', 'titleSort', 'originalTitle',
 			'originallyAvailableAt', 'contentRating', 'userRating',
 			'studio', 'tagline', 'summary',
-			'Genre', 'Collection'
+			'Genre'
 		),
 		2,
 		"""
@@ -108,7 +107,6 @@ media_types = {
 			tagline TEXT,
 			summary TEXT,
 			Genre TEXT,
-			Collection TEXT,
 			episodeSort TEXT,
 			autoDeletionItemPolicyUnwatchedLibrary TEXT,
 			autoDeletionItemPolicyWatchedLibrary TEXT,
@@ -178,7 +176,7 @@ media_types = {
 	'artist': (
 		(
 			'title', 'titleSort', 'summary',
-			'Genre', 'Style', 'Mood', 'Country', 'Collection', 'Similar'
+			'Genre', 'Style', 'Mood', 'Country', 'Similar'
 		),
 		8,
 		"""
@@ -193,7 +191,6 @@ media_types = {
 			Style TEXT,
 			Mood TEXT,
 			Country TEXT,
-			Collection TEXT,
 			Similar TEXT,
 			albumSort TEXT,
 			poster BLOB,
@@ -208,7 +205,7 @@ media_types = {
 			'title', 'titleSort',
 			'originallyAvailableAt', 'contentRating', 'userRating',
 			'studio','summary',
-			'Genre', 'Style', 'Mood', 'Collection'
+			'Genre', 'Style', 'Mood'
 		),
 		9,
 		"""
@@ -226,7 +223,6 @@ media_types = {
 			Genre TEXT,
 			Style TEXT,
 			Mood TEXT,
-			Collection TEXT,
 			poster BLOB,
 			art BLOB
 		);
@@ -257,6 +253,32 @@ media_types = {
 		""",
 		10,
 		['track']
+	),
+	'collection': (
+		(
+			'title', 'titleSort', 'contentRating', 'summary',
+			'collectionMode', 'collectionSort',
+			'subtype'
+		),
+		18,
+		"""
+		CREATE TABLE IF NOT EXISTS collection (
+			rating_key TEXT UNIQUE,
+			updated_at INTEGER,
+			title TEXT,
+			titleSort TEXT,
+			contentRating TEXT,
+			summary TEXT,
+			collectionMode TEXT,
+			collectionSort TEXT,
+			subtype TEXT,
+			guids TEXT,
+			poster BLOB,
+			art BLOB
+		);
+		""",
+		18,
+		['collection']
 	),
 	'server': (
 		(
@@ -368,13 +390,15 @@ process_summary = {
 	'episode_poster': "The (custom) poster of episodes.",
 	'art': "The (custom) art of movies, shows, seasons, artists and albums.",
 	'episode_art': "The (custom) art of episodes.",
+	'collection': "The collections in every library",
 	'intro_marker': "The intro marker of episodes, which describes the beginning and end of the intro.",
 	'chapter_thumbnail': "The by plex automatically generated thumbnails for chapters.",
 	'server_settings': "The settings of the server"
 }
 process_types = ('import','export','reset')
 advanced_metadata_keys = ('languageOverride','useOriginalTitle','episodeSort','autoDeletionItemPolicyUnwatchedLibrary','autoDeletionItemPolicyWatchedLibrary','flattenSeasons','showOrdering','albumSort')
-metadata_skip_keys = ('rating_key','guid','updated_at','poster','art','watched_status','intro_start','intro_end','hash') + advanced_metadata_keys + media_types['server'][0]
+advanced_collection_keys = ('collectionMode','collectionSort')
+metadata_skip_keys = ('rating_key','guid','updated_at','poster','art','watched_status','intro_start','intro_end','hash','subtype','guids') + advanced_metadata_keys + advanced_collection_keys + media_types['server'][0]
 
 def _leave(db, plex_db=None, e=None):
 	print('Shutting down...')
@@ -429,6 +453,56 @@ def _export(
 			return
 		else:
 			cursor.execute(f"DELETE FROM {type} WHERE rating_key = '{rating_key}'")
+	elif type == 'collection':
+		#collection either hasn't been added to db yet or has been imported after exporting
+		cursor.execute(f'DELETE FROM {type} WHERE title = "{data["title"]}";')
+
+	#if requested, export collection here and return function (collection is a "special" case)
+	if type == 'collection':
+		if data.get('smart') == '1': return
+		#export metadata
+		collection_info = ssn.get(f'{base_url}/library/collections/{data["ratingKey"]}', params={'includePreferences': '1'}).json()['MediaContainer']['Metadata'][0]
+		db_keys, db_values = ['rating_key','updated_at'], [rating_key, collection_info.get('updatedAt',0)]
+		for key in keys:
+			if key == 'titleSort':
+				value = collection_info.get('titleSort', collection_info.get('title', ''))
+			else:
+				value = collection_info.get(key)
+
+			if value != None:
+				db_keys.append(key)
+				db_values.append(value)
+
+		#export preferences
+		db_keys += [s['id'] for s in collection_info['Preferences']['Setting']]
+		db_values += [s['value'] for s in collection_info['Preferences']['Setting']]
+
+		#export entries
+		collection_content = ssn.get(f'{base_url}/library/collections/{data["ratingKey"]}/children', params={'includeGuids': '1'}).json()['MediaContainer'].get('Metadata',[])
+		db_keys.append('guids')
+		db_values += ["|".join([str(m['Guid']) for m in collection_content])]
+
+		#export images
+		if 'thumb' in collection_info:
+			r = ssn.get(f'{base_url}{collection_info["thumb"]}')
+			if r.status_code == 200:
+				db_keys.append('poster')
+				db_values.append(r.content)
+
+		if 'art' in collection_info:
+			r = ssn.get(f'{base_url}{collection_info["art"]}')
+			if r.status_code == 200:
+				db_keys.append('art')
+				db_values.append(r.content)
+
+		#write to database
+		comm = f"""
+		INSERT INTO {type} ({",".join(db_keys)})
+		VALUES ({",".join(['?'] * len(db_keys))})
+		"""
+		cursor.execute(comm, db_values)
+		return
+
 	if not 'Guid' in data: return
 
 	#request certain media again when we need it's metadata (lib output doesn't show all)
@@ -450,11 +524,11 @@ def _export(
 			if key[0].isupper():
 				value = ",".join([x['tag'] for x in media_info.get(key, [])]) or None
 			elif key == '[index]':
-				value = media_info.get('index', None)
+				value = media_info.get('index')
 			elif key == 'titleSort' and type != 'track':
 				value = media_info.get('titleSort', media_info.get('title', ''))
 			else:
-				value = media_info.get(key, None)
+				value = media_info.get(key)
 
 			if value != None:
 				db_keys.append(key)
@@ -525,14 +599,64 @@ def _import(
 	else:
 		return 'Unknown source type when trying to import data (internal error)'
 	user_ids, user_tokens = user_data
+	if type in ('server','collection'):
+		machine_id = ssn.get(f"{base_url}/").json()['MediaContainer']['machineIdentifier']
 
 	if type == 'server':
-		machine_id = ssn.get(f"{base_url}/").json()['MediaContainer']['machineIdentifier']
 		cursor.execute(f"SELECT * FROM {type} WHERE machine_id = ?", [machine_id])
 		server_settings = cursor.fetchone()
 		if server_settings == None: return
 		payload = dict(zip(media_types[type][0], server_settings[1:]))
 		ssn.put(f'{base_url}/:/prefs', params=payload)
+		return
+
+	if type == 'collection':
+		cursor.execute(f"SELECT * FROM collection;")
+		collections = cursor.fetchall()
+		collection_types = set([c[8] for c in collections])
+		cursor.execute(f"SELECT *  FROM collection LIMIT 1;")
+		target_keys = next(zip(*cursor.description))
+		sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
+		#go through every library and check if a collection "fits" in it
+		for lib in sections:
+			if not lib['type'] in collection_types: continue
+			lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'type': media_types[lib['type']][3], 'includeGuids': '1'}).json()['MediaContainer'].get('Metadata',[])
+			#guid -> ratingkey
+			lib_content = dict(map(lambda m: (str(m['Guid']), m['ratingKey']), lib_output))
+			collection_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/collections').json()['MediaContainer'].get('Metadata',[])
+			#title -> ratingkey
+			collection_content = dict(map(lambda c: (c['title'], c['ratingKey']), collection_output))
+			#go through every collection to check if it fits in library
+			for collection in collections[:18]:
+				collection_entries = collection[9].split("|")
+				collection_keys = [lib_content.get(str(e)) for e in collection_entries]
+				if len(collection_keys) == len(collection_entries):
+					#collection can go in library
+					#remove existing collection if present
+					old_ratingkey = collection_content.get(collection[2])
+					if old_ratingkey != None:
+						ssn.delete(f'{base_url}/library/collections/{old_ratingkey}')
+					#create collection
+					new_ratingkey = ssn.post(f'{base_url}/library/collections', params={'title': collection[2], 'smart': '0', 'sectionId': lib['key'], 'type': media_types[lib['type']][3], 'uri': f'server://{machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(collection_keys)}'}).json()['MediaContainer']['Metadata'][0]['ratingKey']
+					#set poster
+					if collection[10] != None:
+						ssn.post(f'{base_url}/library/collections/{new_ratingkey}/posters', data=collection[10])
+					#set art
+					if collection[11] != None:
+						ssn.post(f'{base_url}/library/collections/{new_ratingkey}/arts', data=collection[11])
+					#set settings
+					payload = {
+						'type': media_type,
+						'id': new_ratingkey,
+					}
+					for option, value in zip(target_keys, collection):
+						if option in metadata_skip_keys: continue
+						payload[f'{option}.value'] = value or ''
+						payload[f'{option}.locked'] = 1
+					ssn.put(f'{base_url}/library/sections/{lib["key"]}/all', params=payload)
+					#set advanced settings
+					payload = {o: v for o, v in zip(target_keys, collection) if o in advanced_collection_keys}
+					ssn.put(f'{base_url}/library/metadata/{new_ratingkey}/prefs', params=payload)
 		return
 
 	rating_key = data['ratingKey']
@@ -674,16 +798,21 @@ def _reset(
 		'type': media_type,
 		'id': rating_key
 	}
-	if target_poster == True:
-		payload['thumb.locked'] = 0
-	if target_art == True:
-		payload['art.locked'] = 0
-	if target_metadata == True:
+	if type == 'collection':
 		for key in keys:
-			if key[0].isupper():
-				payload[f'{key.lower()}.locked'] = 0
-			else:
-				payload[f'{key}.locked'] = 0
+			if key in metadata_skip_keys: continue
+			payload[f'{key}.locked'] = 0
+	else:
+		if target_poster == True:
+			payload['thumb.locked'] = 0
+		if target_art == True:
+			payload['art.locked'] = 0
+		if target_metadata == True:
+			for key in keys:
+				if key[0].isupper():
+					payload[f'{key.lower()}.locked'] = 0
+				else:
+					payload[f'{key}.locked'] = 0
 
 	ssn.put(f'{base_url}/library/sections/{media_lib_id}/all', params=payload)
 
@@ -748,7 +877,7 @@ def plex_exporter_importer(
 	summary += ''.join([f'	{process_summary.get(process_entry, process_entry)}\n' for process_entry in process])
 	#what's targeted
 	summary += f'This is going to be done for '
-	if 'server_settings' in process:
+	if 'server_settings' in process or 'collection' in process:
 		summary += 'your server'
 		if len(process) > 1:
 			summary += ' and '
@@ -771,8 +900,8 @@ def plex_exporter_importer(
 			if album_name != None:
 				summary += f' -> Album {album_name}'
 				if track_name != None: summary += f' -> Track {track_name}'
-		elif not process == ['server_settings']: summary += f'the library {library_name}'
-	summary += '.'
+		elif not (len(process) == 1 and process[0] in ('server_settings','collection')): summary += f'the library {library_name}'
+	summary += '.\n'
 	print(summary)
 
 	#setup connection to plex db if needed
@@ -803,7 +932,7 @@ def plex_exporter_importer(
 			return 'Both "all" and a target-specifier are set'
 
 	else:
-		if not True in all_target_specifiers and library_name == None and process != ['server_settings']:
+		if not True in all_target_specifiers and library_name == None and not (len(process) == 1 and process[0] in ('server_settings','collection')):
 			return '"all" is set to False but no target-specifier is given'
 		if season_number != None and series_name == None:
 			return '"season_number" is set but not "series_name"'
@@ -813,7 +942,6 @@ def plex_exporter_importer(
 			return '"album_name" is set but not "artist_name"'
 		if track_name != None and (album_name == None or artist_name == None):
 			return '"track_name" is set but not "album_name" or "artist_name"'
-	print('')
 
 	#setup variables
 	db = connect(database_file)
@@ -868,6 +996,27 @@ def plex_exporter_importer(
 			if isinstance(response, str): return response
 
 		sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
+		if 'collection' in process:
+			print('Collections')
+			if type in ('export','reset'):
+				timestamp_map['collection'] = {}
+				for lib in sections:
+					if type == 'export':
+						cursor.execute(f"SELECT rating_key, updated_at FROM 'collection';")
+						timestamp_map['collection'].update(cursor.fetchall())
+					collections = ssn.get(f'{base_url}/library/sections/{lib["key"]}/collections').json()['MediaContainer'].get('Metadata',[])
+					for collection in collections:
+						if type == 'export':
+							response = method(type='collection', data=collection, watched_map=watched_map, timestamp_map=timestamp_map, **args)
+						elif type == 'reset':
+							response = method(type='collection', data=collection, watched_map=watched_map, timestamp_map=timestamp_map, media_lib_id=lib['key'], **args)
+						if isinstance(response, str): return response
+						else: result_json.append(collection['ratingKey'])
+
+			elif type == 'import':
+				response = method(type='collection', data={}, watched_map=watched_map, timestamp_map=timestamp_map, media_lib_id=0, **args)
+				if isinstance(response, str): return response
+
 		for lib in sections:
 			if not (lib['type'] in media_types and (all == True \
 			or (library_name != None and lib['title'] == library_name) \
