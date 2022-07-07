@@ -480,7 +480,7 @@ def _export(
 		#export entries
 		collection_content = ssn.get(f'{base_url}/library/collections/{data["ratingKey"]}/children', params={'includeGuids': '1'}).json()['MediaContainer'].get('Metadata',[])
 		db_keys.append('guids')
-		db_values += ["|".join([str(m['Guid']) for m in collection_content])]
+		db_values.append("|".join([str(m['Guid']) for m in collection_content if 'Guid' in m]))
 
 		#export images
 		if 'thumb' in collection_info:
