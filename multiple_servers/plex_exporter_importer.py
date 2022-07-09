@@ -24,7 +24,6 @@ plex_linux_group = 'plex'
 from sys import platform
 from os import getenv, path, listdir
 from sqlite3 import connect
-from re import findall
 from datetime import datetime
 from time import perf_counter
 linux_platform = platform == 'linux'
@@ -57,25 +56,25 @@ media_types = {
 		1,
 		"""
 		CREATE TABLE IF NOT EXISTS movie (
-			rating_key TEXT UNIQUE,
-			guid TEXT,
-			updated_at INTEGER,
-			title TEXT,
-			titleSort TEXT,
-			originalTitle TEXT,
-			originallyAvailableAt TEXT,
-			contentRating INTEGER,
-			userRating INTEGER,
-			studio TEXT,
-			tagline TEXT,
+			rating_key INTEGER PRIMARY KEY,
+			guid VARCHAR(120),
+			updated_at INTEGER(8),
+			title VARCHAR(255),
+			titleSort VARCHAR(255),
+			originalTitle VARCHAR(255),
+			originallyAvailableAt VARCHAR(10),
+			contentRating VARCHAR(15),
+			userRating FLOAT,
+			studio VARCHAR(255),
+			tagline VARCHAR(255),
 			summary TEXT,
 			Genre TEXT,
 			Writer TEXT,
 			Director TEXT,
-			languageOverride TEXT,
-			useOriginalTitle TEXT,
+			languageOverride VARCHAR(5),
+			useOriginalTitle INTEGER(1),
 			watched_status TEXT,
-			hash TEXT,
+			hash VARCHAR(255),
 			chapter_thumbnails BLOB,
 			poster BLOB,
 			art BLOB
@@ -94,26 +93,26 @@ media_types = {
 		2,
 		"""
 		CREATE TABLE IF NOT EXISTS show (
-			rating_key TEXT UNIQUE,
-			guid TEXT,
-			updated_at INTEGER,
-			title TEXT,
-			titleSort TEXT,
-			originalTitle TEXT,
-			originallyAvailableAt TEXT,
-			contentRating INTEGER,
-			userRating INTEGER,
-			studio TEXT,
-			tagline TEXT,
+			rating_key INTEGER PRIMARY KEY,
+			guid VARCHAR(120),
+			updated_at INTEGER(8),
+			title VARCHAR(255),
+			titleSort VARCHAR(255),
+			originalTitle VARCHAR(255),
+			originallyAvailableAt VARCHAR(10),
+			contentRating VARCHAR(15),
+			userRating FLOAT,
+			studio VARCHAR(255),
+			tagline VARCHAR(255),
 			summary TEXT,
 			Genre TEXT,
-			episodeSort TEXT,
-			autoDeletionItemPolicyUnwatchedLibrary TEXT,
-			autoDeletionItemPolicyWatchedLibrary TEXT,
-			flattenSeasons TEXT,
-			showOrdering TEXT,
-			languageOverride TEXT,
-			useOriginalTitle TEXT,
+			episodeSort INTEGER(1),
+			autoDeletionItemPolicyUnwatchedLibrary INTEGER(2),
+			autoDeletionItemPolicyWatchedLibrary INTEGER(3),
+			flattenSeasons INTEGER(1),
+			showOrdering VARCHAR(10),
+			languageOverride VARCHAR(5),
+			useOriginalTitle INTEGER(1),
 			poster BLOB,
 			art BLOB
 		);
@@ -128,10 +127,10 @@ media_types = {
 		3,
 		"""
 		CREATE TABLE IF NOT EXISTS season (
-			rating_key TEXT UNIQUE,
-			guid TEXT,
-			updated_at INTEGER,
-			title TEXT,
+			rating_key INTEGER PRIMARY KEY,
+			guid VARCHAR(120),
+			updated_at INTEGER(8),
+			title VARCHAR(255),
 			summary TEXT,
 			poster BLOB,
 			art BLOB
@@ -150,21 +149,21 @@ media_types = {
 		4,
 		"""
 		CREATE TABLE IF NOT EXISTS episode (
-			rating_key TEXT UNIQUE,
-			guid TEXT,
-			updated_at INTEGER,
-			title TEXT,
-			titleSort TEXT,
-			originallyAvailableAt TEXT,
-			contentRating INTEGER,
-			userRating INTEGER,
+			rating_key INTEGER PRIMARY KEY,
+			guid VARCHAR(120),
+			updated_at INTEGER(8),
+			title VARCHAR(255),
+			titleSort VARCHAR(255),
+			originallyAvailableAt VARCHAR(10),
+			contentRating VARCHAR(15),
+			userRating FLOAT,
 			summary TEXT,
 			Writer TEXT,
 			Director TEXT,
 			intro_start INTEGER,
 			intro_end INTEGER,
 			watched_status TEXT,
-			hash TEXT,
+			hash VARCHAR(255),
 			chapter_thumbnails BLOB,
 			poster BLOB,
 			art BLOB
@@ -181,18 +180,18 @@ media_types = {
 		8,
 		"""
 		CREATE TABLE IF NOT EXISTS artist (
-			rating_key TEXT UNIQUE,
-			guid TEXT,
-			updated_at INTEGER,
-			title TEXT,
-			titleSort TEXT,
+			rating_key INTEGER PRIMARY KEY,
+			guid VARCHAR(120),
+			updated_at INTEGER(8),
+			title VARCHAR(255),
+			titleSort VARCHAR(255),
 			summary TEXT,
 			Genre TEXT,
 			Style TEXT,
 			Mood TEXT,
 			Country TEXT,
 			Similar TEXT,
-			albumSort TEXT,
+			albumSort INTEGER(1),
 			poster BLOB,
 			art BLOB
 		);
@@ -210,15 +209,15 @@ media_types = {
 		9,
 		"""
 		CREATE TABLE IF NOT EXISTS album (
-			rating_key TEXT UNIQUE,
-			guid TEXT,
-			updated_at INTEGER,
-			title TEXT,
-			titleSort TEXT,
-			originallyAvailableAt TEXT,
-			contentRating INTEGER,
-			userRating INTEGER,
-			studio TEXT,
+			rating_key INTEGER PRIMARY KEY,
+			guid VARCHAR(120),
+			updated_at INTEGER(8),
+			title VARCHAR(255),
+			titleSort VARCHAR(255),
+			originallyAvailableAt VARCHAR(10),
+			contentRating VARCHAR(15),
+			userRating FLOAT,
+			studio VARCHAR(255),
 			summary TEXT,
 			Genre TEXT,
 			Style TEXT,
@@ -239,13 +238,13 @@ media_types = {
 		10,
 		"""
 		CREATE TABLE IF NOT EXISTS track (
-			rating_key TEXT UNIQUE,
-			guid TEXT,
-			updated_at INTEGER,
-			title TEXT,
-			originalTitle TEXT,
-			contentRating INTEGER,
-			userRating INTEGER,
+			rating_key INTEGER PRIMARY KEY,
+			guid VARCHAR(120),
+			updated_at INTEGER(8),
+			title VARCHAR(255),
+			originalTitle VARCHAR(255),
+			contentRating VARCHAR(15),
+			userRating FLOAT,
 			[index] INTEGER,
 			parentIndex INTEGER,
 			Mood TEXT
@@ -263,15 +262,15 @@ media_types = {
 		18,
 		"""
 		CREATE TABLE IF NOT EXISTS collection (
-			rating_key TEXT UNIQUE,
-			updated_at INTEGER,
-			title TEXT,
-			titleSort TEXT,
+			rating_key INTEGER PRIMARY KEY,
+			updated_at INTEGER(8),
+			title VARCHAR(255),
+			titleSort VARCHAR(255),
 			contentRating TEXT,
 			summary TEXT,
-			collectionMode TEXT,
-			collectionSort TEXT,
-			subtype TEXT,
+			collectionMode INTEGER(1),
+			collectionSort INTEGER(1),
+			subtype VARCHAR(10),
 			guids TEXT,
 			poster BLOB,
 			art BLOB
@@ -509,7 +508,7 @@ def _export(
 	if (target_metadata == True and type != 'season') \
 	or (target_intro_markers == True and type == 'episode') \
 	or (target_chapter_thumbnail == True and type in ('movie','episode')) \
-	or (target_advanced_metadata == True and type in ('movie','show','artist')):
+	or (target_advanced_metadata == True and type == 'movie'):
 		media_info = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'includeGuids': '1', 'includeMarkers': '1', 'includeChapters': '1', 'includePreferences': '1'})
 		if media_info.status_code != 200: return
 		media_info = media_info.json()['MediaContainer']['Metadata'][0]
@@ -593,12 +592,14 @@ def _import(
 		target_poster: bool, target_episode_poster: bool, target_art: bool, target_episode_art: bool,
 		plex_cursor=None, database_folder=None, hash_map=None
 	):
+	user_ids, user_tokens = user_data
+
 	#import different data based on the type
 	if type in media_types:
 		media_type = media_types[type][1]
 	else:
 		return 'Unknown source type when trying to import data (internal error)'
-	user_ids, user_tokens = user_data
+
 	if type in ('server','collection'):
 		machine_id = ssn.get(f"{base_url}/").json()['MediaContainer']['machineIdentifier']
 
@@ -753,11 +754,39 @@ def _import(
 				i = int(plex_cursor.fetchone()[0]) + 1
 			else:
 				i = i[0]
-			plex_cursor.execute(f"INSERT INTO taggings (metadata_item_id,tag_id,[index],text,time_offset,end_time_offset,thumb_url,created_at,extra_data) VALUES ({rating_key},{i},0,'intro',{target[target_keys.index('intro_start')]},{target[target_keys.index('intro_end')]},'','{d}','pv%3Aversion=5');")
+			plex_cursor.execute(f"""
+				INSERT INTO taggings (
+					metadata_item_id,
+					tag_id,
+					[index],
+					text,
+					time_offset,
+					end_time_offset,
+					thumb_url,
+					created_at,
+					extra_data
+				) VALUES (
+					{rating_key},
+					{i},
+					0,
+					'intro',
+					{target[target_keys.index('intro_start')]},
+					{target[target_keys.index('intro_end')]},
+					'',
+					'{d}',
+					'pv%3Aversion=5');
+			""")
 		else:
 			#intro marker exists so update timestamps
-			plex_cursor.execute(f"UPDATE taggings SET time_offset = '{target[target_keys.index('intro_start')]}' WHERE text = 'intro' AND metadata_item_id = '{rating_key}';")
-			plex_cursor.execute(f"UPDATE taggings SET end_time_offset = '{target[target_keys.index('intro_end')]}' WHERE text = 'intro' AND metadata_item_id = '{rating_key}';")
+			plex_cursor.execute(f"""
+				UPDATE taggings
+				SET
+					time_offset = '{target[target_keys.index('intro_start')]}',
+					end_time_offset = '{target[target_keys.index('intro_end')]}'
+				WHERE
+					text = 'intro'
+					AND metadata_item_id = '{rating_key}';
+			""")
 
 	if 'hash' in target_keys and 'chapter_thumbnails' in target_keys and target_chapter_thumbnail == True:
 		hash = hash_map[rating_key]
@@ -946,14 +975,16 @@ def plex_exporter_importer(
 	#setup variables
 	db = connect(database_file)
 	cursor = db.cursor()
+	#create tables
+	cursor.execute("BEGIN TRANSACTION;")
 	for media_type in media_types.values():
 		cursor.execute(media_type[2])
+	cursor.execute("END TRANSACTION;")
 
 	machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
 	shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers', headers={}).text
-	user_ids = findall(r'(?<=userID=")\d+(?=")', shared_users)
-	user_tokens = findall(r'(?<=accessToken=")\S+(?=")', shared_users)
-	user_data = user_ids, user_tokens
+	result = list(map(lambda r: r.split('"')[0:3:2], shared_users.split('userID="')[1:]))
+	user_data = [r[0] for r in result], [r[1] for r in result]
 	if type == 'export':
 		method = _export
 	elif type == 'import':
@@ -1036,17 +1067,18 @@ def plex_exporter_importer(
 
 			if lib['type'] in ('movie','show') and type == 'export' and 'watched_status' in process:
 				#create watched map for every user to reduce requests
-				for user_token in user_tokens:
+				for user_token in user_data[1]:
 					user_lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'X-Plex-Token': user_token, 'type': media_types[lib['type']][3]})
 					if user_lib_output.status_code != 200: continue
 					user_lib_output = user_lib_output.json()['MediaContainer'].get('Metadata', [])
 					watched_map[user_token] = dict(map(lambda m: (m['ratingKey'], m.get('viewOffset','viewCount' in m)), user_lib_output))
 
 			if type == 'export' and not lib['type'] in timestamp_map:
+				#create timestamp map
 				lib_types = media_types[lib['type']][4]
 				for lib_type in lib_types:
 					cursor.execute(f"SELECT rating_key, updated_at FROM {lib_type};")
-					timestamp_map[lib_type] = dict(cursor.fetchall())
+					timestamp_map[lib_type] = dict([[str(r[0]), r[1]] for r in cursor.fetchall()])
 
 			if lib['type'] == 'movie':
 				for movie in lib_output:
@@ -1074,7 +1106,7 @@ def plex_exporter_importer(
 					season_info = season_info.json()['MediaContainer']['Metadata']
 					if verbose == True: print(f'	{show["title"]}')
 					#process show
-					show_info = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
+					show_info = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}', params={'includePreferences': '1','includeGuid': '1'}).json()['MediaContainer']['Metadata'][0]
 					response = method(type='show', data=show_info, watched_map=watched_map, timestamp_map=timestamp_map, **args)
 					if isinstance(response, str): return response
 					else: result_json.append(show['ratingKey'])
@@ -1129,7 +1161,7 @@ def plex_exporter_importer(
 					album_info = album_info.json()['MediaContainer'].get('Metadata',[])
 					if verbose == True: print(f'	{artist["title"]}')
 					#process artist
-					artist_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}').json()['MediaContainer']['Metadata'][0]
+					artist_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}', params={'includeGuid': '1','includePreferences': '1'}).json()['MediaContainer']['Metadata'][0]
 					response = method(type='artist', data=artist_info, watched_map=watched_map, timestamp_map=timestamp_map, **args)
 					if isinstance(response, str): return response
 					else: result_json.append(artist['ratingKey'])
