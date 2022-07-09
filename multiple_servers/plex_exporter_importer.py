@@ -24,7 +24,6 @@ plex_linux_group = 'plex'
 from sys import platform
 from os import getenv, path, listdir
 from sqlite3 import connect
-from re import findall
 from datetime import datetime
 from time import perf_counter
 linux_platform = platform == 'linux'
@@ -593,12 +592,14 @@ def _import(
 		target_poster: bool, target_episode_poster: bool, target_art: bool, target_episode_art: bool,
 		plex_cursor=None, database_folder=None, hash_map=None
 	):
+	user_ids, user_tokens = user_data
+
 	#import different data based on the type
 	if type in media_types:
 		media_type = media_types[type][1]
 	else:
 		return 'Unknown source type when trying to import data (internal error)'
-	user_ids, user_tokens = user_data
+
 	if type in ('server','collection'):
 		machine_id = ssn.get(f"{base_url}/").json()['MediaContainer']['machineIdentifier']
 
@@ -951,9 +952,8 @@ def plex_exporter_importer(
 
 	machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
 	shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers', headers={}).text
-	user_ids = findall(r'(?<=userID=")\d+(?=")', shared_users)
-	user_tokens = findall(r'(?<=accessToken=")\S+(?=")', shared_users)
-	user_data = user_ids, user_tokens
+	result = list(map(lambda r: r.split('"')[0:3:2], shared_users.split('userID="')[1:]))
+	user_data = [r[0] for r in result], [r[1] for r in result]
 	if type == 'export':
 		method = _export
 	elif type == 'import':
@@ -1036,7 +1036,7 @@ def plex_exporter_importer(
 
 			if lib['type'] in ('movie','show') and type == 'export' and 'watched_status' in process:
 				#create watched map for every user to reduce requests
-				for user_token in user_tokens:
+				for user_token in user_data[1]:
 					user_lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'X-Plex-Token': user_token, 'type': media_types[lib['type']][3]})
 					if user_lib_output.status_code != 200: continue
 					user_lib_output = user_lib_output.json()['MediaContainer'].get('Metadata', [])
