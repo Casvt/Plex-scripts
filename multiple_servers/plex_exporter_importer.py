@@ -38,6 +38,7 @@ plex_port = getenv('plex_port', plex_port)
 plex_api_token = getenv('plex_api_token', plex_api_token)
 database_folder = getenv('database_folder', database_folder)
 base_url = f"http://{plex_ip}:{plex_port}"
+request_cache = {}
 if linux_platform == True:
 	plex_linux_user = getenv('plex_linux_user', plex_linux_user)
 	plex_linux_group = getenv('plex_linux_group', plex_linux_group)
@@ -400,6 +401,7 @@ advanced_collection_keys = ('collectionMode','collectionSort')
 metadata_skip_keys = ('rating_key','guid','updated_at','poster','art','watched_status','intro_start','intro_end','hash','subtype','guids') + advanced_metadata_keys + advanced_collection_keys + media_types['server'][0]
 
 def _leave(db, plex_db=None, e=None):
+	#called upon early exit of script
 	print('Shutting down...')
 	db.commit()
 	if plex_db != None:
@@ -409,6 +411,16 @@ def _leave(db, plex_db=None, e=None):
 		print('AN ERROR OCCURED. ALL YOUR PROGRESS IS SAVED. PLEASE SHARE THE FOLLOWING WITH THE DEVELOPER:')
 		raise e
 	exit(0)
+
+def _req_cache(ssn, url, params={}, headers={}):
+	#use for general requests in the hope that it is requested multiple times
+	#and that way the cached result from the first time is returned
+	global request_cache
+
+	if not url in request_cache:
+		request_cache[url] = ssn.get(url, params=params, headers=headers).json()
+
+	return request_cache[url]
 
 def _export(
 		type: str, data: dict, ssn, cursor, user_data: tuple, watched_map: dict, timestamp_map: dict,
@@ -427,10 +439,10 @@ def _export(
 
 	#if requested, export server settings here and return function (server settings is a "special" case)
 	if type == 'server':
-		machine_id = ssn.get(f"{base_url}/").json()['MediaContainer']['machineIdentifier']
+		machine_id = _req_cache(ssn, f"{base_url}/")['MediaContainer']['machineIdentifier']
 		cursor.execute(f"DELETE FROM {type} WHERE machine_id = '{machine_id}'")
 		db_keys, db_values = ['machine_id'], [machine_id]
-		prefs = ssn.get(f'{base_url}/:/prefs').json()['MediaContainer']['Setting']
+		prefs = _req_cache(ssn, f'{base_url}/:/prefs')['MediaContainer']['Setting']
 		for pref in prefs:
 			if not pref['id'] in media_types['server'][0]: continue
 			db_keys.append(pref['id'])
@@ -601,7 +613,7 @@ def _import(
 		return 'Unknown source type when trying to import data (internal error)'
 
 	if type in ('server','collection'):
-		machine_id = ssn.get(f"{base_url}/").json()['MediaContainer']['machineIdentifier']
+		machine_id = _req_cache(ssn, f"{base_url}/")['MediaContainer']['machineIdentifier']
 
 	if type == 'server':
 		cursor.execute(f"SELECT * FROM {type} WHERE machine_id = ?", [machine_id])
@@ -617,7 +629,7 @@ def _import(
 		collection_types = set([c[8] for c in collections])
 		cursor.execute(f"SELECT *  FROM collection LIMIT 1;")
 		target_keys = next(zip(*cursor.description))
-		sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
+		sections = _req_cache(ssn, f'{base_url}/library/sections')['MediaContainer'].get('Directory',[])
 		#go through every library and check if a collection "fits" in it
 		for lib in sections:
 			if not lib['type'] in collection_types: continue
@@ -941,7 +953,7 @@ def plex_exporter_importer(
 			return 'Intro Marker- or Chapter Thumbnail importing or Chapter Thumbnail exporting is requested but script is not run as root'
 
 		#get location to database file
-		database_root = database_folder or dict(map(lambda d: (d['id'], d['value']), ssn.get(f'{base_url}/:/prefs').json()['MediaContainer']['Setting']))['ButlerDatabaseBackupPath']
+		database_root = database_folder or dict(map(lambda d: (d['id'], d['value']), _req_cache(ssn, f'{base_url}/:/prefs')['MediaContainer']['Setting']))['ButlerDatabaseBackupPath']
 		db_file = path.join(database_root, 'com.plexapp.plugins.library.db')
 		if not path.isfile(db_file):
 			return 'Intro Marker- or Chapter Thumbnail importing or Chapter Thumbnail exporting is requested but script is not run on target plex server, or value of database_folder is invalid'
@@ -976,15 +988,12 @@ def plex_exporter_importer(
 	db = connect(database_file)
 	cursor = db.cursor()
 	#create tables
-	cursor.execute("BEGIN TRANSACTION;")
-	for media_type in media_types.values():
-		cursor.execute(media_type[2])
-	cursor.execute("END TRANSACTION;")
+	cursor.executescript(''.join(media_type[2] for media_type in media_types.values()))
 
-	machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
-	shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers', headers={}).text
-	result = list(map(lambda r: r.split('"')[0:3:2], shared_users.split('userID="')[1:]))
-	user_data = [r[0] for r in result], [r[1] for r in result]
+	machine_id = _req_cache(ssn, f'{base_url}/')['MediaContainer']['machineIdentifier']
+	shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers').text
+	result = map(lambda r: r.split('"')[0:3:2], shared_users.split('userID="')[1:])
+	user_data = tuple(zip(*result))
 	if type == 'export':
 		method = _export
 	elif type == 'import':
@@ -1026,15 +1035,14 @@ def plex_exporter_importer(
 				response = method(type='server', data={}, watched_map=watched_map, timestamp_map=timestamp_map, **args)
 			if isinstance(response, str): return response
 
-		sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
+		sections = _req_cache(ssn, f'{base_url}/library/sections')['MediaContainer'].get('Directory',[])
 		if 'collection' in process:
 			print('Collections')
 			if type in ('export','reset'):
-				timestamp_map['collection'] = {}
+				if type == 'export':
+					cursor.execute(f"SELECT rating_key, updated_at FROM 'collection';")
+					timestamp_map['collection'] = dict(cursor.fetchall())
 				for lib in sections:
-					if type == 'export':
-						cursor.execute(f"SELECT rating_key, updated_at FROM 'collection';")
-						timestamp_map['collection'].update(cursor.fetchall())
 					collections = ssn.get(f'{base_url}/library/sections/{lib["key"]}/collections').json()['MediaContainer'].get('Metadata',[])
 					for collection in collections:
 						if type == 'export':
@@ -1101,9 +1109,6 @@ def plex_exporter_importer(
 					if series_name != None and show['title'] != series_name:
 						continue
 
-					season_info = ssn.get(f'{base_url}{show["key"]}', params={'includeGuids': '1'})
-					if season_info.status_code != 200: continue
-					season_info = season_info.json()['MediaContainer']['Metadata']
 					if verbose == True: print(f'	{show["title"]}')
 					#process show
 					show_info = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}', params={'includePreferences': '1','includeGuid': '1'}).json()['MediaContainer']['Metadata'][0]
@@ -1112,6 +1117,9 @@ def plex_exporter_importer(
 					else: result_json.append(show['ratingKey'])
 
 					#process seasons
+					season_info = ssn.get(f'{base_url}{show["key"]}', params={'includeGuids': '1'})
+					if season_info.status_code != 200: continue
+					season_info = season_info.json()['MediaContainer']['Metadata']
 					for season in season_info:
 						if season_number != None and season['index'] != season_number:
 							continue
@@ -1156,9 +1164,6 @@ def plex_exporter_importer(
 					if artist_name != None and artist['title'] != artist_name:
 						continue
 
-					album_info = ssn.get(f'{base_url}{artist["key"]}', params={'includeGuids': '1'})
-					if album_info.status_code != 200: continue
-					album_info = album_info.json()['MediaContainer'].get('Metadata',[])
 					if verbose == True: print(f'	{artist["title"]}')
 					#process artist
 					artist_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}', params={'includeGuid': '1','includePreferences': '1'}).json()['MediaContainer']['Metadata'][0]
@@ -1167,6 +1172,9 @@ def plex_exporter_importer(
 					else: result_json.append(artist['ratingKey'])
 
 					#process albums
+					album_info = ssn.get(f'{base_url}{artist["key"]}', params={'includeGuids': '1'})
+					if album_info.status_code != 200: continue
+					album_info = album_info.json()['MediaContainer'].get('Metadata',[])
 					for album in album_info:
 						if album_name != None and album['title'] != album_name:
 							continue
@@ -1283,7 +1291,6 @@ EPILOG
 	parser.add_argument('-T','--TrackName', type=str, help='Target a specific track inside the targeted album based on it\'s name (only accepted when -d is given)')
 
 	args = parser.parse_args()
-	#get general info about targets, check for illegal arg parsing and call functions
 
 	start_time = perf_counter()
 	response = plex_exporter_importer(
