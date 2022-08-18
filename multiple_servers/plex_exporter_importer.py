@@ -57,7 +57,7 @@ media_types = {
 		1,
 		"""
 		CREATE TABLE IF NOT EXISTS movie (
-			rating_key INTEGER PRIMARY KEY,
+			rating_key VARCHAR(15) PRIMARY KEY,
 			guid VARCHAR(120),
 			updated_at INTEGER(8),
 			title VARCHAR(255),
@@ -94,7 +94,7 @@ media_types = {
 		2,
 		"""
 		CREATE TABLE IF NOT EXISTS show (
-			rating_key INTEGER PRIMARY KEY,
+			rating_key VARCHAR(15) PRIMARY KEY,
 			guid VARCHAR(120),
 			updated_at INTEGER(8),
 			title VARCHAR(255),
@@ -128,7 +128,7 @@ media_types = {
 		3,
 		"""
 		CREATE TABLE IF NOT EXISTS season (
-			rating_key INTEGER PRIMARY KEY,
+			rating_key VARCHAR(15) PRIMARY KEY,
 			guid VARCHAR(120),
 			updated_at INTEGER(8),
 			title VARCHAR(255),
@@ -150,7 +150,7 @@ media_types = {
 		4,
 		"""
 		CREATE TABLE IF NOT EXISTS episode (
-			rating_key INTEGER PRIMARY KEY,
+			rating_key VARCHAR(15) PRIMARY KEY,
 			guid VARCHAR(120),
 			updated_at INTEGER(8),
 			title VARCHAR(255),
@@ -181,7 +181,7 @@ media_types = {
 		8,
 		"""
 		CREATE TABLE IF NOT EXISTS artist (
-			rating_key INTEGER PRIMARY KEY,
+			rating_key VARCHAR(15) PRIMARY KEY,
 			guid VARCHAR(120),
 			updated_at INTEGER(8),
 			title VARCHAR(255),
@@ -210,7 +210,7 @@ media_types = {
 		9,
 		"""
 		CREATE TABLE IF NOT EXISTS album (
-			rating_key INTEGER PRIMARY KEY,
+			rating_key VARCHAR(15) PRIMARY KEY,
 			guid VARCHAR(120),
 			updated_at INTEGER(8),
 			title VARCHAR(255),
@@ -239,7 +239,7 @@ media_types = {
 		10,
 		"""
 		CREATE TABLE IF NOT EXISTS track (
-			rating_key INTEGER PRIMARY KEY,
+			rating_key VARCHAR(15) PRIMARY KEY,
 			guid VARCHAR(120),
 			updated_at INTEGER(8),
 			title VARCHAR(255),
@@ -263,7 +263,7 @@ media_types = {
 		18,
 		"""
 		CREATE TABLE IF NOT EXISTS collection (
-			rating_key INTEGER PRIMARY KEY,
+			rating_key VARCHAR(15) PRIMARY KEY,
 			updated_at INTEGER(8),
 			title VARCHAR(255),
 			titleSort VARCHAR(255),
@@ -440,7 +440,7 @@ def _export(
 	#if requested, export server settings here and return function (server settings is a "special" case)
 	if type == 'server':
 		machine_id = _req_cache(ssn, f"{base_url}/")['MediaContainer']['machineIdentifier']
-		cursor.execute(f"DELETE FROM {type} WHERE machine_id = '{machine_id}'")
+		cursor.execute(f"DELETE FROM {type} WHERE machine_id = ?", (machine_id,))
 		db_keys, db_values = ['machine_id'], [machine_id]
 		prefs = _req_cache(ssn, f'{base_url}/:/prefs')['MediaContainer']['Setting']
 		for pref in prefs:
@@ -616,7 +616,7 @@ def _import(
 		machine_id = _req_cache(ssn, f"{base_url}/")['MediaContainer']['machineIdentifier']
 
 	if type == 'server':
-		cursor.execute(f"SELECT * FROM {type} WHERE machine_id = ?", [machine_id])
+		cursor.execute(f"SELECT * FROM {type} WHERE machine_id = ?", (machine_id,))
 		server_settings = cursor.fetchone()
 		if server_settings == None: return
 		payload = dict(zip(media_types[type][0], server_settings[1:]))
@@ -624,10 +624,9 @@ def _import(
 		return
 
 	if type == 'collection':
-		cursor.execute(f"SELECT * FROM collection;")
+		cursor.execute(f"SELECT * FROM {type};")
 		collections = cursor.fetchall()
 		collection_types = set([c[8] for c in collections])
-		cursor.execute(f"SELECT *  FROM collection LIMIT 1;")
 		target_keys = next(zip(*cursor.description))
 		sections = _req_cache(ssn, f'{base_url}/library/sections')['MediaContainer'].get('Directory',[])
 		#go through every library and check if a collection "fits" in it
@@ -685,10 +684,9 @@ def _import(
 
 	#find media in database
 	guid = str(media_info['Guid'])
-	cursor.execute(f"SELECT * FROM {type} WHERE guid = ?", [guid])
+	cursor.execute(f"SELECT * FROM {type} WHERE guid = ?", (guid,))
 	target = cursor.fetchone()
 	if target == None: return
-	cursor.execute(f"SELECT * FROM {type} LIMIT 1;")
 	target_keys = next(zip(*cursor.description))
 
 	#import data
@@ -754,15 +752,15 @@ def _import(
 
 	if 'intro_start' in target_keys and 'intro_end' in target_keys and target_intro_markers == True:
 		#check if media already has intro marker
-		plex_cursor.execute(f"SELECT * FROM taggings WHERE text = 'intro' AND metadata_item_id = '{rating_key}';")
+		plex_cursor.execute("SELECT * FROM taggings WHERE text = 'intro' AND metadata_item_id = ?;", (rating_key,))
 		if plex_cursor.fetchone() == None:
 			#no intro marker exists so create one
 			d = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-			plex_cursor.execute("SELECT tag_id FROM taggings WHERE text = 'intro' LIMIT 1;")
+			plex_cursor.execute("SELECT tag_id FROM taggings WHERE text = 'intro';")
 			i = plex_cursor.fetchone()
 			if i == None:
 				#no id yet for intro's so make one that isn't taken yet
-				plex_cursor.execute("SELECT tag_id FROM taggings ORDER BY tag_id DESC LIMIT 1;")
+				plex_cursor.execute("SELECT tag_id FROM taggings ORDER BY tag_id DESC;")
 				i = int(plex_cursor.fetchone()[0]) + 1
 			else:
 				i = i[0]
@@ -777,28 +775,19 @@ def _import(
 					thumb_url,
 					created_at,
 					extra_data
-				) VALUES (
-					{rating_key},
-					{i},
-					0,
-					'intro',
-					{target[target_keys.index('intro_start')]},
-					{target[target_keys.index('intro_end')]},
-					'',
-					'{d}',
-					'pv%3Aversion=5');
-			""")
+				) VALUES (?, ?, 0, 'intro', ?, ?, '', ?, 'pv%3Aversion=5');
+			""", (rating_key, i, target[target_keys.index('intro_start')], target[target_keys.index('intro_end')], d))
 		else:
 			#intro marker exists so update timestamps
-			plex_cursor.execute(f"""
+			plex_cursor.execute("""
 				UPDATE taggings
 				SET
-					time_offset = '{target[target_keys.index('intro_start')]}',
-					end_time_offset = '{target[target_keys.index('intro_end')]}'
+					time_offset = ?,
+					end_time_offset = ?
 				WHERE
 					text = 'intro'
-					AND metadata_item_id = '{rating_key}';
-			""")
+					AND metadata_item_id = ?;
+			""", (target[target_keys.index('intro_start')], target[target_keys.index('intro_end')], rating_key))
 
 	if 'hash' in target_keys and 'chapter_thumbnails' in target_keys and target_chapter_thumbnail == True:
 		hash = hash_map[rating_key]
@@ -1086,7 +1075,7 @@ def plex_exporter_importer(
 				lib_types = media_types[lib['type']][4]
 				for lib_type in lib_types:
 					cursor.execute(f"SELECT rating_key, updated_at FROM {lib_type};")
-					timestamp_map[lib_type] = dict([[str(r[0]), r[1]] for r in cursor.fetchall()])
+					timestamp_map[lib_type] = dict(cursor.fetchall())
 
 			if lib['type'] == 'movie':
 				for movie in lib_output:
