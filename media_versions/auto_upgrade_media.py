@@ -152,6 +152,10 @@ def updownCheck(media_info, media_indentation):
 		print(media_indentation + 'DOWNGRADING: View count is lower or equal to ' + str(args.DowngradeViewcount))
 		return updown(media_info, edit_queue, 'down')
 
+	elif args.DowngradeAboveViewcount != None and 'viewCount' in media_info.keys() and media_info['viewCount'] >= args.DowngradeAboveViewcount:
+		print(media_indentation + 'DOWNGRADING: View count is equal to or higher than ' + str(args.DowngradeAboveViewcount))
+		return updown(media_info, edit_queue, 'down')
+
 	elif args.UpgradeDays != None and 'lastViewedAt' in media_info.keys() and media_info['lastViewedAt'] > time.time() - (86400 * args.UpgradeDays):
 		print(media_indentation + 'UPGRADING: Last time viewed was within ' + str(args.UpgradeDays) + ' days')
 		return updown(media_info, edit_queue, 'up')
@@ -168,6 +172,7 @@ parser = argparse.ArgumentParser(description="Automatically up-/downgrade media 
 parser.add_argument('-l','--LibraryName', help="Name of target library (movie or show library); allowed to pass this argument multiple times; also allowed to mix show and movie libraries", required=True, type=str, action='append')
 parser.add_argument('-d','--DowngradeDays', help="The amount of days that the media has not been watched before downgrading one resolution (4k -> 1080p -> 720p)", type=int)
 parser.add_argument('-D','--DowngradeViewcount', help="The viewcount which the video should be below or equal to to downgrade it (4k -> 1080p -> 720p)", type=int)
+parser.add_argument('-v','--DowngradeAboveViewcount', help="The viewcount which the video should be equal to or above to to downgrade it (4k -> 1080p -> 720p)", type=int)
 parser.add_argument('-u','--UpgradeDays', help="The amount of days which the last watch date should fall within to upgrade (e.g. 7 = if the movie has been watched within the last 7 days, upgrade it) (720p -> 1080p -> 4k)", type=int)
 parser.add_argument('-U','--UpgradeViewcount', help="The viewcount which the video should be above to upgrade it (720p -> 1080p -> 4k)", type=int)
 args = parser.parse_args()
@@ -180,8 +185,8 @@ for lib in args.LibraryName:
 				lib_ids.append(level['key'])
 				lib_types[level['key']] = level['type']
 			else: parser.error('Library ' + str(level['title']) + ' is not a movie/show library or the *arr for that type of library isn\'t setup')
-if args.DowngradeDays == None and args.DowngradeViewcount == None and args.UpgradeDays == None and args.UpgradeViewcount == None:
-	parser.error('Atleast one of the following arguments need to be given: -d/--DowngradeDays, -D/--DowngradeViewcount, -u/--UpgradeDays, -U/--UpgradeViewcount')
+if args.DowngradeDays == None and args.DowngradeViewcount == None and args.UpgradeDays == None and args.UpgradeViewcount == None and args.DowngradeAboveViewcount == None:
+	parser.error('Atleast one of the following arguments need to be given: -d/--DowngradeDays, -D/--DowngradeViewcount, -v/--DowngradeAboveViewcount, -u/--UpgradeDays, -U/--UpgradeViewcount')
 
 radarr_movies_output = ''
 radarr_profiles_output = ''
