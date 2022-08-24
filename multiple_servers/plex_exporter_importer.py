@@ -3,11 +3,18 @@
 
 """
 The use case of this script is the following:
-	Export plex metadata to a file that can then be imported back later
+	Export plex metadata to a database file that can then be read from to import the data back (on a different plex instance)
+	The following is supported:
+		metadata, advanced metadata, watched status, posters, backgrounds (arts), collections, intro markers, chapter thumbnails and server settings
 Requirements (python3 -m pip install [requirement]):
 	requests
 Setup:
 	Fill the variables below firstly, then run the script.
+Notes:
+	1. Under the following situations, it is REQUIRED that the script is run on the target server and that the script is run using the root user (administrative user):
+		1. "intro_marker" when importing
+		2. "chapter_thumbnail" when importing
+	2. Importing chapter thumbnails on a non-linux system is not possible.
 """
 
 plex_ip = ''
@@ -1241,7 +1248,7 @@ EPILOG
 {p}
 
 	Notes:
-	1. Under the following situations, it is REQUIRED that the script is run on the server on which the targeted plex server is too and that the script is run using the root user (administrative user):
+	1. Under the following situations, it is REQUIRED that the script is run on the target server and that the script is run using the root user (administrative user):
 		1. "intro_marker" when importing
 		2. "chapter_thumbnail" when importing
 	2. Importing chapter thumbnails on a non-linux system is not possible.
@@ -1255,7 +1262,7 @@ EPILOG
 	When exporting and giving a path to a database file, that database file will be used to put the data in or will be updated if data is already in it (STRONGLY RECOMMENDED IF POSSIBLE)
 	When importing and giving a path to a database file, that database file will be read and used as the source of the data that will be applied
 """.format(p="\n".join(map(lambda k: f'	{k[0]}: {k[1]}', process_summary.items())))
-	parser = ArgumentParser(formatter_class=RawDescriptionHelpFormatter, description='Export plex metadata to a database that can then be imported back later', epilog=epilog)
+	parser = ArgumentParser(formatter_class=RawDescriptionHelpFormatter, description='Export plex metadata to a database file that can then be read from to import the data back (on a different plex instance)', epilog=epilog)
 	parser.add_argument('-t','--Type', choices=process_types, required=True, type=str, help='Either export/import plex metadata or reset import (unlock all fields)')
 	parser.add_argument('-p','--Process', choices=process_summary.keys(), help='EXPORT/IMPORT ONLY: Select what to export/import; this argument can be given multiple times to select multiple things', action='append', required=True)
 	parser.add_argument('-L','--Location', type=str, help='SEE EPILOG', default=path.dirname(path.abspath(__file__)))

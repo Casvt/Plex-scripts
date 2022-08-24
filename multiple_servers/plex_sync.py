@@ -3,25 +3,27 @@
 
 """
 The use case of this script is the following:
-	Keep data between two plex servers synced. Multiple things can be synced at the same time with multiuser support
+	Keep data between two plex servers synced. Multiple things can be synced at the same time with multiuser support.
+	The following is supported:
+		collections, posters, watch history, playlists and intro markers
 Requirements (python3 -m pip install [requirement]):
 	requests
 	aiohttp
 Setup:
 	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
 	Run this script at an interval. Decide for yourself what the interval is (e.g. every day or every week)
+Note:
+	1. When syncing one of the following things, it is REQUIRED that the script is run on the target server and that the script is run using the root user (administrative user):
+		1. "intro_marker"
 Example:
 	Examples are assuming that main server name is 'Batman server' and backup server name is 'Robin server'
 	python3 plex_sync.py -s 'Batman server' --Sync watch_history --User @all
+		Taking 'Batman server' as the source and 'Robin server' as the sync target
 		Sync watch history of every user from 'Batman server' to 'Robin server'
-	python3 plex_sync.py -s 'Robin server' --Sync posters
-		Taking 'Robin server' as the source and 'Batman server' as the sync target
-		Sync the posters of the media (movies, shows and seasons)(posters of playlists and collections are synced with the Playlists and Collections action respectively)
-		No need to specify users as this sync action is a general sync action and not a user specific action
 	python3 plex_sync.py --SourceName 'Batman server' --User @me --User 'user2' --Sync collections --Sync playlists --Sync watch_history
 		Taking 'Batman server' as the source and 'Robin server' as the sync target
-		Apply the user specific sync actions (in this case playlists and watch history) to yourself and 'user2'
 		Sync the collections, playlists and watch history
+		Apply the user specific sync actions (in this case playlists and watch history) to yourself and 'user2'
 """
 
 main_plex_name = 'Main'
@@ -563,7 +565,7 @@ if __name__ == '__main__':
 	backup_ssn.params.update({'X-Plex-Token': backup_plex_api_token})
 
 	#setup arg parsing
-	parser = ArgumentParser(description='Keep data between two plex servers synced', epilog='If you want to use the "intro_markers" feature, it is REQUIRED that the script is run on the target server and is run using the root user (administrative user)')
+	parser = ArgumentParser(description='Keep data between two plex servers synced', epilog='If you want to use the "intro_markers" feature, it is REQUIRED that the script is run on the target server and that the script is run using the root user (administrative user).')
 	parser.add_argument('-s','--SourceName', choices=[main_plex_name, backup_plex_name], help='Select the server that the data will be pulled from. It will be uploaded on the other server (target server)', required=True)
 	parser.add_argument('-S','--Sync', choices=['collections','posters','watch_history','playlists','intro_markers'], help='Select what to sync; This argument can be given multiple times', action='append', required=True, default=[])
 	parser.add_argument('-u','--User', help='Apply user-specific sync actions to these users; This argument can be given multiple times; Use @me to target yourself; Use @all to target everyone', action='append', default=['@me'])
