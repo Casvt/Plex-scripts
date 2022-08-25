@@ -7,7 +7,7 @@ The use case of this script is the following:
 Requirements (python3 -m pip install [requirement]):
 	requests
 Setup:
-	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
+	Fill the variables below.
 	Run this script at an interval. Decide for yourself what the interval is (e.g. every 20m or every 12h)
 """
 
