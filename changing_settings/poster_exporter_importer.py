@@ -311,4 +311,13 @@ if __name__ == '__main__':
 		poster_name=args.PosterName, background_name=args.BackgroundName
 	)
 	if not isinstance(response, list):
-		parser.error(response)
+		if response == 'Both "all" and a target-specifier are set':
+			parser.error('Both -a/--All and a target-specifier are set')
+		elif response == '"all" is set to False but no target-specifier is given':
+			parser.error('-a/--All is not set but also no target-specifier is set')
+		elif response == '"season_number" is set but not "series_name"':
+			parser.error('-S/--SeasonNumber is set but not -s/--SeriesName')
+		elif response == '"episode_number" is set but not "season_number" or "series_name"':
+			parser.error('-e/--EpisodeNumber is set but not -S/--SeasonNumber or -s/--SeriesName')
+		else:
+			parser.error(response)
