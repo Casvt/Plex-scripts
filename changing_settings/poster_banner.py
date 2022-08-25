@@ -27,7 +27,7 @@ plex_port = os.getenv('plex_port', plex_port)
 plex_api_token = os.getenv('plex_api_token', plex_api_token)
 base_url = f'http://{plex_ip}:{plex_port}'
 
-def _set_poster(ssn, rating_key: str, info: str, position: str='top'):
+def _set_poster(ssn, rating_key: str, info: str, position: str='top', background: str='black', background_transparency: int=0.65):
 	font_file = os.path.join(os.path.dirname(__file__), 'poster_banner.otf')
 	font_size = 500
 
@@ -80,7 +80,7 @@ def _set_poster(ssn, rating_key: str, info: str, position: str='top'):
 	poster_data = ssn.get(f'{base_url}{media_info["thumb"]}').content
 
 	#create PIL instance of poster and calculate info
-	source_img = Image.open(BytesIO(poster_data)).convert("RGB")
+	source_img = Image.open(BytesIO(poster_data)).convert("RGBA")
 	img_width, img_height = source_img.size
 	if position == 'top': bar_size = ((0, 0), (img_width, img_height * 0.1))
 	if position == 'bottom': bar_size = ((0, img_height * 0.9), (img_width, img_height))
@@ -96,23 +96,35 @@ def _set_poster(ssn, rating_key: str, info: str, position: str='top'):
 			if text_px[1] > (img_height - bar_size[0][1]) * 0.9 and size > 1: continue
 			text_size = ((img_width / 2) - (text_px[0] / 2), ((bar_size[0][1]) + ((img_height - bar_size[0][1]) / 2)) - (text_px[1] / 2 ))
 		break
-	draw = ImageDraw.Draw(source_img)
+	#determine background and text color
+	if background == 'black':
+		bar_color = "black"
+	elif background == 'semi-transparent':
+		bar_color = (0,0,0, int(255 * background_transparency))
+
 	#draw ractangle
-	draw.rectangle(bar_size, fill="black")
+	if background == "black":
+		draw = ImageDraw.Draw(source_img)
+		draw.rectangle(bar_size, fill=bar_color)
+	elif background == "semi-transparent":
+		overlay = Image.new("RGBA", source_img.size, (0,0,0,0))
+		overlay_draw = ImageDraw.Draw(overlay)
+		overlay_draw.rectangle(bar_size, fill=bar_color)
+		source_img = Image.alpha_composite(source_img, overlay)
+		draw = ImageDraw.Draw(source_img)
 	#put text inside
-	draw.text(text_size, content, font=font)
+	draw.text(text_size, content, font=font, fill="white")
 
 	#save edited version
 	output_image = BytesIO()
-	source_img.save(output_image, 'jpeg')
-#	source_img.save('various/poster_banner_output.jpeg', 'jpeg')
+	source_img.convert("RGB").save(output_image, 'jpeg')
 
 	#upload new poster
 	ssn.post(f'{base_url}/library/metadata/{rating_key}/posters', data=output_image.getvalue())
 
 	return
 
-def poster_banner(ssn, info: str, library_name: str, movie_name: list=[], series_name: str=None, target: str=None, season_number: int=None, episode_number: int=None, position: str='top'):
+def poster_banner(ssn, info: str, library_name: str, movie_name: list=[], series_name: str=None, target: str=None, season_number: int=None, episode_number: int=None, position: str='top', background: str='black', background_transparency: int=0.65):
 	result_json = []
 
 	#check for illegal arg parsing
@@ -148,7 +160,7 @@ def poster_banner(ssn, info: str, library_name: str, movie_name: list=[], series
 					continue
 
 				print(f'	{movie["title"]}')
-				result = _set_poster(ssn=ssn, rating_key=movie['ratingKey'], info=info, position=position)
+				result = _set_poster(ssn=ssn, rating_key=movie['ratingKey'], info=info, position=position, background=background, background_transparency=background_transparency)
 				if result == None: result_json.append(movie['ratingKey'])
 				else: return result
 
@@ -161,7 +173,7 @@ def poster_banner(ssn, info: str, library_name: str, movie_name: list=[], series
 
 				print(f'	{show["title"]}')
 				if target == 'series':
-					result = _set_poster(ssn=ssn, rating_key=show['ratingKey'], info=info, position=position)
+					result = _set_poster(ssn=ssn, rating_key=show['ratingKey'], info=info, position=position, background=background, background_transparency=background_transparency)
 					if result == None: result_json.append(show['ratingKey'])
 					else: return result
 				elif target == 'episode':
@@ -184,7 +196,7 @@ def poster_banner(ssn, info: str, library_name: str, movie_name: list=[], series
 							continue
 
 						print(f'		S{episode["parentIndex"]}E{episode["index"]}	- {episode["title"]}')
-						result = _set_poster(ssn=ssn, rating_key=episode['ratingKey'], info=info, position=position)
+						result = _set_poster(ssn=ssn, rating_key=episode['ratingKey'], info=info, position=position, background=background, background_transparency=background_transparency)
 						if result == None: result_json.append(episode['ratingKey'])
 						else: return result
 
@@ -225,6 +237,8 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser(description="Create a version of the media poster with a banner at the top containing chosen information and upload it to plex")
 	parser.add_argument('-i', '--Info', choices=['title','studio','year','content_rating','status','resolution','video_codec'], help="The info that should be put inside the bar", required=True)
 	parser.add_argument('-p', '--Position', choices=['top','bottom'], help='The location of the black bar on the poster', default='top')
+	parser.add_argument('-b', '--Background', choices=['black','semi-transparent'], help='Choose the background of the banner', default='black')
+	parser.add_argument('-T', '--BackgroundTransparency', type=int, help='Choose how transparent the background is when -b/--Background is set to "semi-transparent". Should be between 0 and 1. Default is 0.65', default=0.65)
 	parser.add_argument('-l', '--LibraryName', type=str, help="Name of target library", required=True)
 	parser.add_argument('-m', '--MovieName', type=str, help="Target a specific movie inside a movie library based on it's name (only accepted when -l is a movie library); allowed to give argument multiple times", action='append', default=[])
 	parser.add_argument('-s', '--SeriesName', type=str, help="Target a specific series inside a show library based on it's name (only accepted when -l is a show library)")
@@ -234,7 +248,7 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	#call function and process result
-	response = poster_banner(ssn=ssn, info=args.Info, position=args.Position, library_name=args.LibraryName, movie_name=args.MovieName, series_name=args.SeriesName, target=args.Target, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber)
+	response = poster_banner(ssn=ssn, info=args.Info, position=args.Position, background=args.Background, background_transparency=args.BackgroundTransparency, library_name=args.LibraryName, movie_name=args.MovieName, series_name=args.SeriesName, target=args.Target, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber)
 	if not isinstance(response, list):
 		if response == '"series_name" is set but not "target"':
 			parser.error('-s/--SeriesName given but not -t/--Target given')
