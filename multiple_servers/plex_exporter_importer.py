@@ -1107,7 +1107,7 @@ def plex_exporter_importer(
 
 					if verbose == True: print(f'	{show["title"]}')
 					#process show
-					show_info = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}', params={'includePreferences': '1','includeGuid': '1'}).json()['MediaContainer']['Metadata'][0]
+					show_info = ssn.get(f'{base_url}/library/metadata/{show["ratingKey"]}', params={'includePreferences': '1','includeGuids': '1'}).json()['MediaContainer']['Metadata'][0]
 					response = method(type='show', data=show_info, watched_map=watched_map, timestamp_map=timestamp_map, **args)
 					if isinstance(response, str): return response
 					else: result_json.append(show['ratingKey'])
@@ -1162,7 +1162,7 @@ def plex_exporter_importer(
 
 					if verbose == True: print(f'	{artist["title"]}')
 					#process artist
-					artist_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}', params={'includeGuid': '1','includePreferences': '1'}).json()['MediaContainer']['Metadata'][0]
+					artist_info = ssn.get(f'{base_url}/library/metadata/{artist["ratingKey"]}', params={'includeGuids': '1','includePreferences': '1'}).json()['MediaContainer']['Metadata'][0]
 					response = method(type='artist', data=artist_info, watched_map=watched_map, timestamp_map=timestamp_map, **args)
 					if isinstance(response, str): return response
 					else: result_json.append(artist['ratingKey'])
