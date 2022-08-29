@@ -744,7 +744,9 @@ def _import(
 		watched_info = target[target_keys.index('watched_status')].split(',')
 		for user, watched_state in zip(watched_info[::2], watched_info[1::2]):
 			if user == '_admin': user_token = plex_api_token
-			else: user_token = user_tokens[user_ids.index(user)]
+			else:
+				if not user in user_ids: continue
+				user_token = user_tokens[user_ids.index(user)]
 
 			#set watched status of media for this user
 			if watched_state == 'True':
@@ -989,7 +991,7 @@ def plex_exporter_importer(
 	machine_id = _req_cache(ssn, f'{base_url}/')['MediaContainer']['machineIdentifier']
 	shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers').text
 	result = map(lambda r: r.split('"')[0:3:2], shared_users.split('userID="')[1:])
-	user_data = tuple(zip(*result))
+	user_data = tuple(zip(*result)) or ((),())
 	if type == 'export':
 		method = _export
 	elif type == 'import':
