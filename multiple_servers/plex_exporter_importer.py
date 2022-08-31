@@ -5,7 +5,7 @@
 The use case of this script is the following:
 	Export plex metadata to a database file that can then be read from to import the data back (on a different plex instance)
 	The following is supported:
-		metadata, advanced metadata, watched status, posters, backgrounds (arts), collections, intro markers, chapter thumbnails and server settings
+		metadata, advanced metadata, watched status, posters, backgrounds (arts), collections, playlists, intro markers, chapter thumbnails and server settings
 Requirements (python3 -m pip install [requirement]):
 	requests
 Setup:
@@ -46,6 +46,7 @@ plex_api_token = getenv('plex_api_token', plex_api_token)
 database_folder = getenv('database_folder', database_folder)
 base_url = f"http://{plex_ip}:{plex_port}"
 request_cache = {}
+guid_map = {}
 if linux_platform == True:
 	plex_linux_user = getenv('plex_linux_user', plex_linux_user)
 	plex_linux_group = getenv('plex_linux_group', plex_linux_group)
@@ -287,6 +288,27 @@ media_types = {
 		18,
 		['collection']
 	),
+	'playlist': (
+		(
+			'title', 'summary'
+		),
+		15,
+		"""
+		CREATE TABLE IF NOT EXISTS playlist (
+			rating_key VARCHAR(15) PRIMARY KEY,
+			updated_at INTEGER(8),
+			user_id INTEGER(10),
+			title VARCHAR(255),
+			summary TEXT,
+			playlistType VARCHAR(15),
+			guids TEXT,
+			poster BLOB,
+			art BLOB
+		);
+		""",
+		15,
+		['playlist']
+	),
 	'server': (
 		(
 			'FriendlyName','sendCrashReports','PushNotificationsEnabled','logDebug','LogVerbose','ButlerUpdateChannel',
@@ -398,6 +420,7 @@ process_summary = {
 	'art': "The (custom) art of movies, shows, seasons, artists and albums.",
 	'episode_art': "The (custom) art of episodes.",
 	'collection': "The collections in every library",
+	'playlist': "The playlists of every user",
 	'intro_marker': "The intro marker of episodes, which describes the beginning and end of the intro.",
 	'chapter_thumbnail': "The by plex automatically generated thumbnails for chapters.",
 	'server_settings': "The settings of the server"
@@ -429,11 +452,38 @@ def _req_cache(ssn, url, params={}, headers={}):
 
 	return request_cache[url]
 
+def _guid_to_ratingkey(ssn, guid: str):
+	global guid_map
+
+	rating_key = guid_map.get(guid)
+	if rating_key == None:
+		sections = _req_cache(ssn, f'{base_url}/library/sections')['MediaContainer'].get('Directory',[])
+		for lib in sections:
+			if lib['type'] == 'movie':
+				media_type = '1'
+			elif lib['type'] == 'show':
+				media_type = '4'
+			else: continue
+			lib_output = _req_cache(ssn, f'{base_url}/library/sections/{lib["key"]}/all', params={'type': media_type, 'includeGuids': '1'})['MediaContainer'].get('Metadata',[])
+			for media in lib_output:
+				media_guid = str(media['Guid'])
+				if media_guid == guid:
+					rating_key = media['ratingKey']
+					guid_map[media_guid] = media['ratingKey']
+					break
+			else:
+				continue
+			break
+		else:
+			rating_key = None
+
+	return rating_key
+
 def _export(
 		type: str, data: dict, ssn, cursor, user_data: tuple, watched_map: dict, timestamp_map: dict,
 		target_metadata: bool, target_advanced_metadata: bool, target_watched: bool, target_intro_markers: bool, target_chapter_thumbnail: bool,
 		target_poster: bool, target_episode_poster: bool, target_art: bool, target_episode_art: bool,
-		database_folder=None, hash_map=None
+		database_folder=None, hash_map=None, user_id=None
 	):
 	user_ids, user_tokens = user_data
 
@@ -498,7 +548,7 @@ def _export(
 		#export entries
 		collection_content = ssn.get(f'{base_url}/library/collections/{data["ratingKey"]}/children', params={'includeGuids': '1'}).json()['MediaContainer'].get('Metadata',[])
 		db_keys.append('guids')
-		db_values.append("|".join([str(m['Guid']) for m in collection_content if 'Guid' in m]))
+		db_values.append("|".join(str(m['Guid']) for m in collection_content if 'Guid' in m))
 
 		#export images
 		if 'thumb' in collection_info:
@@ -509,6 +559,39 @@ def _export(
 
 		if 'art' in collection_info:
 			r = ssn.get(f'{base_url}{collection_info["art"]}')
+			if r.status_code == 200:
+				db_keys.append('art')
+				db_values.append(r.content)
+
+		#write to database
+		comm = f"""
+		INSERT INTO {type} ({",".join(db_keys)})
+		VALUES ({",".join(['?'] * len(db_keys))})
+		"""
+		cursor.execute(comm, db_values)
+		return
+
+	#if requested, export playlist here and return function (playlist is a "special" case)
+	if type == 'playlist':
+		if data.get('smart') == True: return
+		#export metadata
+		db_keys = ['rating_key','updated_at','user_id','title','summary','playlistType']
+		db_values =  [rating_key, data.get('updatedAt',0), user_id, data.get('title'), data.get('summary'), data.get('playlistType')]
+
+		#export entries
+		playlist_content = ssn.get(f'{base_url}{data["key"]}', params={'includeGuids': '1'}).json()['MediaContainer'].get('Metadata',[])
+		db_keys.append('guids')
+		db_values.append("|".join(str(m['Guid']) for m in playlist_content if 'Guid' in m))
+
+		#export images
+		if 'thumb' in data:
+			r = ssn.get(f'{base_url}{data["thumb"]}')
+			if r.status_code == 200:
+				db_keys.append('poster')
+				db_values.append(r.content)
+
+		if 'art' in data:
+			r = ssn.get(f'{base_url}{data["thumb"]}')
 			if r.status_code == 200:
 				db_keys.append('art')
 				db_values.append(r.content)
@@ -619,7 +702,7 @@ def _import(
 	else:
 		return 'Unknown source type when trying to import data (internal error)'
 
-	if type in ('server','collection'):
+	if type in ('server','collection','playlist'):
 		machine_id = _req_cache(ssn, f"{base_url}/")['MediaContainer']['machineIdentifier']
 
 	if type == 'server':
@@ -676,6 +759,33 @@ def _import(
 					#set advanced settings
 					payload = {o: v for o, v in zip(target_keys, collection) if o in advanced_collection_keys}
 					ssn.put(f'{base_url}/library/metadata/{new_ratingkey}/prefs', params=payload)
+		return
+
+	if type == 'playlist':
+		cursor.execute(f"SELECT * FROM {type};")
+		playlists = cursor.fetchall()
+		for playlist in playlists:
+			if playlist[2] == '_admin': user_token = plex_api_token
+			else:
+				if not playlist[2] in user_ids: continue
+				user_token = user_tokens[user_ids.index(playlist[2])]
+			ssn.params.update({'X-Plex-Token': user_token})
+			user_playlists = _req_cache(ssn, f'{base_url}/playlists')['MediaContainer'].get('Metadata',[])
+			#delete already existing playlists with the name
+			for user_playlist in user_playlists:
+				if user_playlist['title'] == playlist[3]:
+					ssn.delete(f'{base_url}/playlists/{user_playlist["ratingKey"]}')
+			#create playlist
+			rating_keys = ",".join(filter(lambda x: x != None, (_guid_to_ratingkey(ssn, g) for g in playlist[6].split("|"))))
+			new_ratingkey = ssn.post(f'{base_url}/playlists', params={'type': playlist[5], 'title': playlist[3], 'smart': '0', 'uri': f'server://{machine_id}/com.plexapp.plugins.library/library/metadata/{rating_keys}'}).json()['MediaContainer']['Metadata'][0]['ratingKey']
+			#set summary
+			if playlist[4] or '' != '':
+				ssn.put(f'{base_url}/playlists/{new_ratingkey}', params={'summary': playlist[4]})
+			#set images
+			if playlist[7] or '' != '':
+				ssn.post(f'{base_url}/playlists/{new_ratingkey}/posters', data=playlist[7])
+			if playlist[8] or '' != '':
+				ssn.post(f'{base_url}/playlists/{new_ratingkey}/arts', data=playlist[8])
 		return
 
 	rating_key = data['ratingKey']
@@ -916,7 +1026,7 @@ def plex_exporter_importer(
 	summary += ''.join([f'	{process_summary.get(process_entry, process_entry)}\n' for process_entry in process])
 	#what's targeted
 	summary += f'This is going to be done for '
-	if 'server_settings' in process or 'collection' in process:
+	if 'server_settings' in process or 'collection' in process or 'playlist' in process:
 		summary += 'your server'
 		if len(process) > 1:
 			summary += ' and '
@@ -939,7 +1049,7 @@ def plex_exporter_importer(
 			if album_name != None:
 				summary += f' -> Album {album_name}'
 				if track_name != None: summary += f' -> Track {track_name}'
-		elif not (len(process) == 1 and process[0] in ('server_settings','collection')): summary += f'the library {library_name}'
+		elif not (len(process) == 1 and process[0] in ('server_settings','collection','playlist')): summary += f'the library {library_name}'
 	summary += '.\n'
 	print(summary)
 
@@ -971,7 +1081,7 @@ def plex_exporter_importer(
 			return 'Both "all" and a target-specifier are set'
 
 	else:
-		if not True in all_target_specifiers and library_name == None and not (len(process) == 1 and process[0] in ('server_settings','collection')):
+		if not True in all_target_specifiers and library_name == None and not (len(process) == 1 and process[0] in ('server_settings','collection','playlist')):
 			return '"all" is set to False but no target-specifier is given'
 		if season_number != None and series_name == None:
 			return '"season_number" is set but not "series_name"'
@@ -1053,6 +1163,23 @@ def plex_exporter_importer(
 			elif type == 'import':
 				response = method(type='collection', data={}, watched_map=watched_map, timestamp_map=timestamp_map, media_lib_id=0, **args)
 				if isinstance(response, str): return response
+
+		if 'playlist' in process:
+			print('Playlists')
+			if type == 'export':
+				cursor.execute(f"SELECT rating_key, updated_at FROM 'playlist';")
+				timestamp_map['playlist'] = dict(cursor.fetchall())
+				complete_user_data = (list(user_data[0]) + ['_admin'], list(user_data[1]) + [plex_api_token])
+				for user_id, user_token in zip(*complete_user_data):
+					ssn.params.update({'X-Plex-Token': user_token})
+					playlists = ssn.get(f'{base_url}/playlists').json()['MediaContainer'].get('Metadata',[])
+					for playlist in playlists:
+						response = method(type='playlist', data=playlist, watched_map=watched_map, timestamp_map=timestamp_map, user_id=user_id, **args)
+						if isinstance(response, str): return response
+						else: result_json.append(playlist['ratingKey'])
+
+			elif type == 'import':
+				response = method(type='playlist', data={}, watched_map=watched_map, timestamp_map=timestamp_map, media_lib_id=0, **args)
 
 		for lib in sections:
 			if not (lib['type'] in media_types and (all == True \
