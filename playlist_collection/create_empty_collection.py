@@ -29,7 +29,7 @@ media_types = {
 	'artist': (8,10)
 }
 
-def create_empty_collection(ssn, library_name: str, title: str, summary: str='', poster: str='', background: str='', sort_title: str=''):
+def create_empty_collection(ssn, library_name: str, title: str, summary: str='', poster: str='', background: str='', sort_title: str='', delete_existing: bool=False):
 	result_json = []
 
 	#check if library exists
@@ -41,6 +41,12 @@ def create_empty_collection(ssn, library_name: str, title: str, summary: str='',
 			break
 	else:
 		return 'Library not found'
+
+	if delete_existing == True:
+		collections = ssn.get(f'{base_url}/library/sections/{lib_id}/collections').json()['MediaContainer'].get('Metadata',[])
+		for collection in collections:
+			if collection['title'] == title:
+				ssn.delete(f'{base_url}/library/collections/{collection["ratingKey"]}')
 
 	machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
 	#create collection
@@ -102,9 +108,10 @@ if __name__ == '__main__':
 	parser.add_argument('-p','--Poster', type=str, help='URL or filepath to image that will be set as the poster', default='')
 	parser.add_argument('-b','--Background', type=str, help='URL or filepath to image that will be set as the background', default='')
 	parser.add_argument('-S','--SortTitle', type=str, help='The sort title of the collection', default='')
+	parser.add_argument('-D','--DeleteExisting', action='store_true', help='If a collection with the same name already exists, delete it first')
 
 	args = parser.parse_args()
 	#call function and process result
-	response = create_empty_collection(ssn=ssn, library_name=args.LibraryName, title=args.Title, summary=args.Summary, poster=args.Poster, background=args.Background, sort_title=args.SortTitle)
+	response = create_empty_collection(ssn=ssn, library_name=args.LibraryName, title=args.Title, summary=args.Summary, poster=args.Poster, background=args.Background, sort_title=args.SortTitle, delete_existing=args.DeleteExisting)
 	if not isinstance(response, list):
 		parser.error(response)
