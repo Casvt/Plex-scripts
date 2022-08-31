@@ -42,7 +42,7 @@ def postcreditscene_notification(title: str, year: str):
 	result_json = []
 
 	search_results = requests_get(f'https://aftercredits.com/', params={'s': f'{title} {year}'}, headers={'Host': 'aftercredits.com','Referer': f'https://aftercredits.com/?s={title}+{year}'.replace(' ','+'), 'sec-ch-ua': '"Chromium";v="104", " Not A;Brand";v="99", "Google Chrome";v="104"'}).text
-	result = search(f'>Stingers</a>            </div>\\r\\n            <h3 class=\"entry-title td-module-title\"><a href=\"[^\"]+?\" rel=\"bookmark\" title=\"{title} \({year}\)\*', search_results)
+	result = search(f'(?i)>(stingers|after credits)</a>            </div>\\r\\n            <h3 class=\"entry-title td-module-title\"><a href=\"[^\"]+?\" rel=\"bookmark\" title=\"{title} \({year}\)\*', search_results)
 	if result:
 		#media has post-credit scene
 		print(f'{title} ({year}) has a post-credit scene')
