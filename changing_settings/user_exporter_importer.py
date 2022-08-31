@@ -136,8 +136,17 @@ def _playlist_process(ssn, cursor, type: str, name: str, user_token: str):
 		playlist_entries = cursor.fetchall()
 		machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
 		for playlist in playlist_entries:
-			rating_keys = ",".join(filter(lambda x: x != None, (_guid_to_ratingkey(ssn, g) for g in playlist[5].split("|"))))
-			ssn.post(f'{base_url}/playlists', params={'type': playlist[4], 'title': playlist[1], 'smart': '0', 'uri': f'server://{machine_id}/com.plexapp.plugins.library/library/metadata/{rating_keys}'})
+			#create playlist
+			rating_keys = ",".join(filter(lambda x: x != None, (_guid_to_ratingkey(ssn, g) for g in playlist[4].split("|"))))
+			new_ratingkey = ssn.post(f'{base_url}/playlists', params={'type': playlist[3], 'title': playlist[1], 'smart': '0', 'uri': f'server://{machine_id}/com.plexapp.plugins.library/library/metadata/{rating_keys}'}).json()['MediaContainer']['Metadata'][0]['ratingKey']
+			#set summary
+			if playlist[2] or '' != '':
+				ssn.put(f'{base_url}/playlists/{new_ratingkey}', params={'summary': playlist[2]})
+			#set images
+			if playlist[5] or '' != '':
+				ssn.post(f'{base_url}/playlists/{new_ratingkey}/posters', data=playlist[5])
+			if playlist[6] or '' != '':
+				ssn.post(f'{base_url}/playlists/{new_ratingkey}/arts', data=playlist[6])
 
 	return
 
