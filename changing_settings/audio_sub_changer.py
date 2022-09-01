@@ -3,19 +3,19 @@
 
 """
 The use case of this script is the following:
-	Change the audio/subtitle track, based on target language, for an episode, season, series, movie or entire movie/show library
+	Change the audio/subtitle track, based on target language, forced status, codec, title and/or channel count (audio) for an episode, season, series, movie or entire movie/show library
 Requirements (python3 -m pip install [requirement]):
 	requests
 Setup:
 	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
 	You can find examples of the usage below.
 Examples:
-	--Type audio --Language fr --LibraryName Tv-series
-		Try to set the audio for all episodes of all series in the 'Tv-series' library to one with the language French
-	--Type subtitle --Language en --LibraryName Tv-series --Series 'Initial D' --SeasonNumber 5
-		Try to set the subtitle for season 5 of the series Initial D in the 'Tv-series' library to one with the language English
-	--Type subtitle --Language en --LibraryName Films --Movie '2 Fast 2 Furious' --Movie 'The Fast and The Furious'
-		Try to set the subtitle for the movies '2 Fast 2 Furious' and 'The Fast and The Furious' inside the 'Films' library to one with the language English
+	--Type audio --Language fr --Language en --ChannelCount 6 --Forced avoid --LibraryName Tv-series
+		Set the audio for all episodes of all series in the 'Tv-series' library. Try to set the audio track to French but otherwise English. If possible, choose the audio stream with 6 channels (5.1) but avoid the stream if it's marked as forced
+	--Type subtitle --Language en --Codec ass --LibraryName Tv-series --Series 'Initial D' --SeasonNumber 5
+		Try to set the subtitle for season 5 of the series Initial D in the 'Tv-series' library to one with the language English and, if possible, the codec .ass
+	--Type subtitle --Language en --TitleContains 'songs' --LibraryName Films --Movie '2 Fast 2 Furious' --Movie 'The Fast and The Furious'
+		Try to set the subtitle for the movies '2 Fast 2 Furious' and 'The Fast and The Furious' inside the 'Films' library to one with the language English, prefering subtitles that have 'songs' in the title
 """
 
 plex_ip = ''
@@ -23,7 +23,6 @@ plex_port = ''
 plex_api_token = ''
 
 from os import getenv
-from re import findall as re_findall
 
 # Environmental Variables
 plex_ip = getenv('plex_ip', plex_ip)
@@ -33,45 +32,104 @@ base_url = f"http://{plex_ip}:{plex_port}"
 
 langs = ['aa', 'ab', 'af', 'ak', 'am', 'an', 'ar', 'as', 'av', 'ay', 'az', 'ba', 'be', 'bg', 'bh', 'bi', 'bm', 'bn', 'bo', 'br', 'bs', 'ca', 'ce', 'ch', 'co', 'cr', 'cs', 'cu', 'cv', 'cy', 'da', 'de', 'dv', 'dz', 'ee', 'el', 'en', 'en-US', 'en-GB', 'en-AU', 'eo', 'es', 'et', 'eu', 'fa', 'ff', 'fi', 'fj', 'fo', 'fr', 'fy', 'ga', 'gd', 'gl', 'gn', 'gu', 'gv', 'ha', 'he', 'hi', 'ho', 'hr', 'ht', 'hu', 'hy', 'hz', 'ia', 'id', 'ie', 'ig', 'ii', 'ik', 'io', 'is', 'it', 'iu', 'ja', 'jv', 'ka', 'kg', 'ki', 'kj', 'kk', 'kl', 'km', 'kn', 'ko', 'kr', 'ks', 'ku', 'kv', 'kw', 'ky', 'la', 'lb', 'lg', 'li', 'ln', 'lo', 'lt', 'lu', 'lv', 'mg', 'mh', 'mi', 'mk', 'ml', 'mn', 'mo', 'mr', 'ms', 'mt', 'my', 'na', 'nb', 'nd', 'ne', 'ng', 'nl', 'nn', 'no', 'nr', 'nv', 'ny', 'oc', 'oj', 'om', 'or', 'os', 'pa', 'pi', 'pl', 'ps', 'pt', 'qu', 'rm', 'rn', 'ro', 'ru', 'rw', 'sa', 'sc', 'sd', 'se', 'sg', 'sh', 'si', 'sk', 'sl', 'sm', 'sn', 'so', 'sq', 'sr', 'ss', 'st', 'su', 'sv', 'sw', 'ta', 'te', 'tg', 'th', 'ti', 'tk', 'tl', 'tn', 'to', 'tr', 'ts', 'tt', 'tw', 'ty', 'ug', 'uk', 'ur', 'uz', 've', 'vi', 'vo', 'wa', 'wo', 'xh', 'yi', 'yo', 'za', 'zh', 'zu']
 
-def _set_track(ssn, user_tokens: list, rating_key: str, type: int, language: str):
-	#only keep the users that have access to the media and also get media output
-	for token in user_tokens:
-		r = ssn.get(f'{base_url}/library/metadata/{rating_key}', params={'X-Plex-Token': token}).json()['MediaContainer']
-		if 'Metadata' in r:
-			media_output = r['Metadata'][0]
+def _sort_streams(x: dict, language: list, channel_count: int, forced: str, codec: list, title_contains: str) -> tuple:
+	#check forced
+	if forced == 'avoid':
+		if x['forced']:
+			forced = 1
 		else:
-			user_tokens.pop(token)
+			forced = 0
+	else: #prefer
+		if x['forced']:
+			forced = 0
+		else:
+			forced = 1
 
-	if user_tokens:
-		for media in media_output['Media']:
-			for part in media['Part']:
-				#check if media doesn't already have correct stream selected
-				for stream in part['Stream']:
-					if not stream['streamType'] == type: continue
-					if 'languageTag' in stream and stream['languageTag'] == language and 'selected' in stream:
-						#media already has correct stream selected
-						break
-				else:
-					#selected stream does not match so find matching one and if found select it
-					for stream in part['Stream']:
-						if not stream['streamType'] == type: continue
-						if 'languageTag' in stream and stream['languageTag'] == language and not 'selected' in stream:
-							#found matching stream so select it
-							for token in user_tokens:
-								if type == 2:
-									#set audio stream
-									ssn.put(f'{base_url}/library/parts/{part["id"]}', params={'audioStreamID': stream['id'], 'allParts': 0, 'X-Plex-Token': token})
-								elif type == 3:
-									#set subtitle stream
-									ssn.put(f'{base_url}/library/parts/{part["id"]}', params={'subtitleStreamID': stream['id'], 'allParts': 0, 'X-Plex-Token': token})
-							break
-	return
+	#check language
+	if x['language'] in language:
+		language = language.index(x['language'])
+	else:
+		language = float('inf')
 
-def audio_sub_changer(ssn, type: str, language: str, library_name: str, movie_name: list=[], series_name: str=None, season_number: int=None, episode_number: int=None, users: list=[]):
+	#check channel count
+	if channel_count > 0:
+		if x['channels'] == channel_count:
+			channel_count = 0
+		else:
+			channel_count = 1
+	else:
+		channel_count = 0
+
+	#check codec
+	if codec:
+		if x['codec'] in codec:
+			codec = codec.index(x['codec'])
+		else:
+			codec = float('inf')
+	else:
+		codec = 0
+
+	#check title_contains
+	if title_contains:
+		if title_contains in x.get('title',''):
+			title_contains = 0
+		else:
+			title_contains = 1
+	else:
+		title_contains = 0
+
+	#built order
+	order = (forced, language, channel_count, codec, title_contains)
+	return order
+
+def _set_track(
+	ssn, user_data: dict, rating_key: str, type: int,
+	language: list, forced: str, codec: list, title_contains: str, channel_count: int
+) -> bool:
+	#this function sorts the streams
+	updated = False
+	media_output = ssn.get(f'{base_url}/library/metadata/{rating_key}').json()['MediaContainer']['Metadata'][0]
+	for media in media_output['Media']:
+		for part in media['Part']:
+			#get all streams and note down their information
+			streams = []
+			for stream in part['Stream']:
+				if not stream['streamType'] == type: continue
+				streams.append({
+					'language': stream.get('languageTag','und'),
+					'id': stream['id'],
+					'forced': 'forced' in stream,
+					'codec': stream.get('codec'),
+					'channels': stream.get('channels',-1),
+					'title': stream.get('title'),
+					'selected': 'selected' in stream
+				})
+			if not streams: continue
+			#sort the streams based on preferences
+			streams.sort(key=lambda x: _sort_streams(x, language, channel_count, forced, codec, title_contains))
+			if streams[0]['selected'] == False: updated = True
+			#apply choice
+			for user_token in user_data.values():
+				if type == 2:
+					ssn.put(f'{base_url}/library/parts/{part["id"]}', params={'audioStreamID': streams[0]['id'], 'allParts': 0, 'X-Plex-Token': user_token})
+				elif type == 3:
+					ssn.put(f'{base_url}/library/parts/{part["id"]}', params={'subtitleStreamID': streams[0]['id'], 'allParts': 0, 'X-Plex-Token': user_token})
+	return updated
+
+def audio_sub_changer(
+	ssn, type: str, language: list, forced: str, codec: list, title_contains: str, channel_count: int,
+	library_name: str,
+	movie_name: list=[],
+	series_name: str=None, season_number: int=None, episode_number: int=None,
+	users: list=[]
+):
 	result_json = []
 
 	#check for illegal arg parsing
-	if not language in langs: return 'Unknown language'
+	if not language: return 'Language required to be given'
+	for lang in language:
+		if not lang in langs:
+			return f'Invalid language: {lang}'
 	if not type in ('audio','subtitle'):
 		#type is not set to audio or subtitle
 		return 'Unknown type'
@@ -83,37 +141,39 @@ def audio_sub_changer(ssn, type: str, language: str, library_name: str, movie_na
 		return '"episode_number" is set but not "season_number" or "series_name"'
 	type = 2 if type == 'audio' else 3
 
+	args = {
+		'type': type,
+		'language': language,
+		'forced': forced,
+		'codec': codec,
+		'title_contains': title_contains,
+		'channel_count': channel_count
+	}
+
 	#setup users
-	user_tokens = []
 	if not users:
 		#just add the user self
-		user_tokens = [plex_api_token]
+		user_data = {'@me': plex_api_token}
 	else:
 		#add the tokens of multiple users
 		machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
-		shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers', headers={}).text
+		shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers').text
+		result = map(lambda r: r.split('"')[0:7:6], shared_users.split('username="')[1:])
+		user_data = dict(result)
+		user_data['@me'] = plex_api_token
 
-		#add user self if requested
-		if '@me' in users or '@all' in users:
-			user_tokens = [plex_api_token]
+		if not '@all' in users:
+			for username in user_data.keys():
+				if not username in users:
+					user_data.pop(username)
 
-		#get data about every user (username at beginning and token at end)
-		user_data = re_findall(r'(?<=username=").*?accessToken="\w+?(?=")', shared_users)
-		for user in user_data:
-			username = user.split('"')[0]
-			if not '@all' in users and not username in users:
-				continue
-			token = user.split('"')[-1]
-			user_tokens.append(token)
-
-	sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer']['Directory']
-	#loop through the libraries
+	sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
 	for lib in sections:
 		if lib['title'] != library_name: continue
 
 		#this library is targeted
 		print(lib['title'])
-		lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all').json()['MediaContainer']['Metadata']
+		lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all').json()['MediaContainer'].get('Metadata',[])
 		if lib['type'] == 'movie':
 			#library is a movie lib; loop through every movie
 			for movie in lib_output:
@@ -122,7 +182,9 @@ def audio_sub_changer(ssn, type: str, language: str, library_name: str, movie_na
 					continue
 
 				print(f'	{movie["title"]}')
-				_set_track(ssn=ssn, user_tokens=user_tokens, rating_key=movie['ratingKey'], type=type, language=language)
+				result = _set_track(ssn=ssn, user_data=user_data, rating_key=movie['ratingKey'], **args)
+				if result:
+					print('		Updated')
 				result_json.append(movie['ratingKey'])
 
 		elif lib['type'] == 'show':
@@ -152,7 +214,9 @@ def audio_sub_changer(ssn, type: str, language: str, library_name: str, movie_na
 						continue
 
 					print(f'		S{episode["parentIndex"]}E{episode["index"]}	- {episode["title"]}')
-					_set_track(ssn=ssn, user_tokens=user_tokens, rating_key=episode['ratingKey'], type=type, language=language)
+					result = _set_track(ssn=ssn, user_data=user_data, rating_key=episode['ratingKey'], **args)
+					if result:
+						print('			Updated')
 					result_json.append(episode['ratingKey'])
 
 					if episode_number != None:
@@ -189,9 +253,13 @@ if __name__ == '__main__':
 	ssn.params.update({'X-Plex-Token': plex_api_token})
 
 	#setup arg parsing
-	parser = argparse.ArgumentParser(description="Change the audio/subtitle track, based on target language, for an episode, season, series, movie or entire movie/show library")
+	parser = argparse.ArgumentParser(description="Change the audio/subtitle track, based on target language, forced status, codec, title and/or channel count (audio) for an episode, season, series, movie or entire movie/show library")
 	parser.add_argument('-t', '--Type', choices=['audio','subtitle'], help="Give the type of stream to change", required=True)
-	parser.add_argument('-L', '--Language', type=str, help="ISO-639-1 (2 lowercase letters) language code (e.g. 'en') to try to set the stream to", required=True)
+	parser.add_argument('-L', '--Language', action='append', help="ISO-639-1 language code (2 lowercase letters e.g. 'en') to try to set the stream to; give multiple times to setup a preference order", required=True)
+	parser.add_argument('-f', '--Forced', choices=['avoid','prefer'], help='How forced streams should be treated; default is "avoid"', default='avoid')
+	parser.add_argument('-c', '--Codec', action='append', help="Name of stream codec to prefer; give multiple times to setup a preference order", default=[])
+	parser.add_argument('-T', '--TitleContains', type=str, help="Give preference to streams that have the given value in their title", default='')
+	parser.add_argument('-C', '--ChannelCount', type=int, help="AUDIO ONLY: Give preference to streams that have the given amount of audio channels", default=-1)
 	parser.add_argument('-l', '--LibraryName', type=str, help="Name of target library", required=True)
 	parser.add_argument('-m', '--MovieName', type=str, help="Target a specific movie inside a movie library based on it's name (only accepted when -l is a movie library); allowed to give argument multiple times", action='append', default=[])
 	parser.add_argument('-s', '--SeriesName', type=str, help="Target a specific series inside a show library based on it's name (only accepted when -l is a show library)")
@@ -201,12 +269,15 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	#call function and process result
-	response = audio_sub_changer(ssn=ssn, type=args.Type, language=args.Language, library_name=args.LibraryName, movie_name=args.MovieName, series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber, users=args.User)
+	response = audio_sub_changer(
+		ssn=ssn, type=args.Type, language=args.Language, forced=args.Forced, codec=args.Codec, title_contains=args.TitleContains, channel_count=args.ChannelCount,
+		library_name=args.LibraryName,
+		movie_name=args.MovieName,
+		series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber,
+		users=args.User
+	)
 	if not isinstance(response, list):
-		if response == 'Unknown language':
-			parser.error('-l/--Language requires a valid language code')
-
-		elif response == '"season_number" is set but not "series_name"':
+		if response == '"season_number" is set but not "series_name"':
 			parser.error('-S/--SeasonNumber given but not -s/--SeriesName given')
 
 		elif response == '"episode_number" is set but not "season_number" or "series_name"':
