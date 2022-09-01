@@ -8,11 +8,12 @@ Requirements (python3 -m pip install [requirement]):
 	requests
 	apprise
 Setup:
-	1. Setup the apprise_url below:
+	1. Fill the plex variables below
+	2. Setup the apprise_url below:
 		Go to the following link, choose the service you want and add the url below.
 		https://github.com/caronc/apprise/wiki#notification-services
 		Example (email): apprise_url = 'mailto://example_user:example_password@gmail.com'
-	2. Go to the tautulli web-ui -> Settings -> Notification Agents -> Add a new notification agent -> Script:
+	3. Go to the tautulli web-ui -> Settings -> Notification Agents -> Add a new notification agent -> Script:
 		Configuration:
 			Script Folder = /path/to/script/folder
 			Script File = select this script
