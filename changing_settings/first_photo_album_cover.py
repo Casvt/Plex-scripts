@@ -94,15 +94,16 @@ def first_photo_album_cover(ssn, library_name: str, exclude_name: list=[], exclu
 	return result_json
 
 if __name__ == '__main__':
-	import requests, argparse
+	from requests import Session
+	from argparse import ArgumentParser
 
 	#setup vars
-	ssn = requests.Session()
+	ssn = Session()
 	ssn.headers.update({'Accept': 'application/json'})
 	ssn.params.update({'X-Plex-Token': plex_api_token})
 
 	#setup arg parsing
-	parser = argparse.ArgumentParser(description='Set the first image of an album as the album cover')
+	parser = ArgumentParser(description='Set the first image of an album as the album cover')
 	parser.add_argument('-l','--LibraryName', type=str, help='Name of target library', required=True)
 	parser.add_argument('-e','--ExcludeName', type=str, help='Give name of album to exclude from processing; allowed to give argument multiple times', action='append', default=[])
 	parser.add_argument('-E','--ExcludeRegex', type=str, help='Give regex where matching album names are excluded from processing; allowed to give argument multiple times', action='append')
