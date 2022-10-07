@@ -51,7 +51,17 @@ def postcreditscene_notification(rating_key: str):
 
 	media_info = requests_get(f'{base_url}/library/metadata/{rating_key}', params={'X-Plex-Token': plex_api_token}, headers={'Accept': 'application/json'}).json()['MediaContainer']['Metadata'][0]
 	title, year = media_info.get('originalTitle', media_info.get('title','')), media_info.get('year',0)
-	search_results = requests_get(f'https://aftercredits.com/', params={'s': f'{title} {year}'}, headers={'Host': 'aftercredits.com','Referer': f'https://aftercredits.com/?s={title}+{year}'.replace(' ','+'), 'sec-ch-ua': '"Chromium";v="104", " Not A;Brand";v="99", "Google Chrome";v="104"'}).text
+	search_results = requests_get(
+		'https://aftercredits.com/',
+		params={
+			's': f'{title} {year}'.encode()
+		},
+		headers={
+			'Host': 'aftercredits.com',
+			'Referer': f'https://aftercredits.com/?s={title}+{year}'.replace(' ','+').encode(),
+			'sec-ch-ua': '"Chromium";v="104", " Not A;Brand";v="99", "Google Chrome";v="104"'
+		}
+	).text
 	result = search(f'(?i)>(stingers|after credits)</a>            </div>\\r\\n            <h3 class=\"entry-title td-module-title\"><a href=\"[^\"]+?\" rel=\"bookmark\" title=\"{title} \({year}\)\*', search_results)
 	if result:
 		#media has post-credit scene
