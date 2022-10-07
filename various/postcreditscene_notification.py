@@ -51,6 +51,8 @@ def postcreditscene_notification(rating_key: str):
 
 	media_info = requests_get(f'{base_url}/library/metadata/{rating_key}', params={'X-Plex-Token': plex_api_token}, headers={'Accept': 'application/json'}).json()['MediaContainer']['Metadata'][0]
 	title, year = media_info.get('originalTitle', media_info.get('title','')), media_info.get('year',0)
+	if title.lower().startswith('the '):
+		title = title[4:] + ', The'
 	search_results = requests_get(
 		'https://aftercredits.com/',
 		params={
