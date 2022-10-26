@@ -1056,8 +1056,13 @@ def plex_exporter_importer(
 	#setup connection to plex db if needed
 	if ('intro_marker' in process and type == 'import') or ('chapter_thumbnail' in process and type in ('import','export')):
 		#importing intro markers or chapter thumbnails requires root and access to target plex database file
-		from os import geteuid
-		if (type == 'import' and any(k in process for k in ('intro_marker','chapter_thumbnail'))) and geteuid() != 0:
+		if linux_platform == True:
+			from os import geteuid
+			is_root = geteuid() == 0
+		else:
+			import ctypes
+			is_root = bool(ctypes.windll.shell32.IsUserAnAdmin())
+		if (type == 'import' and any(k in process for k in ('intro_marker','chapter_thumbnail'))) and is_root == False:
 			return 'Intro Marker- or Chapter Thumbnail importing or Chapter Thumbnail exporting is requested but script is not run as root'
 
 		#get location to database file
