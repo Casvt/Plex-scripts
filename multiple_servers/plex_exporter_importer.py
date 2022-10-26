@@ -724,12 +724,12 @@ def _import(
 			if not lib['type'] in collection_types: continue
 			lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all', params={'type': media_types[lib['type']][3], 'includeGuids': '1'}).json()['MediaContainer'].get('Metadata',[])
 			#guid -> ratingkey
-			lib_content = dict(map(lambda m: (str(m['Guid']), m['ratingKey']), lib_output))
+			lib_content = {m['Guid']: m['ratingKey'] for m in lib_output if 'Guid' in m}
 			collection_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/collections').json()['MediaContainer'].get('Metadata',[])
 			#title -> ratingkey
 			collection_content = dict(map(lambda c: (c['title'], c['ratingKey']), collection_output))
 			#go through every collection to check if it fits in library
-			for collection in collections[:18]:
+			for collection in collections:
 				collection_entries = collection[9].split("|")
 				collection_keys = [lib_content.get(str(e)) for e in collection_entries]
 				if len(collection_keys) == len(collection_entries):
