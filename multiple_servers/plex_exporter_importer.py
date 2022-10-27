@@ -731,7 +731,7 @@ def _import(
 			#go through every collection to check if it fits in library
 			for collection in collections:
 				collection_entries = collection[9].split("|")
-				collection_keys = [lib_content.get(str(e)) for e in collection_entries]
+				collection_keys = [lib_content.get(str(e)) for e in collection_entries if str(e) in lib_content]
 				if len(collection_keys) == len(collection_entries):
 					#collection can go in library
 					#remove existing collection if present
