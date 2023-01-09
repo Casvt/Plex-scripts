@@ -163,9 +163,7 @@ def audio_sub_changer(
 		user_data['@me'] = plex_api_token
 
 		if not '@all' in users:
-			for username in user_data.keys():
-				if not username in users:
-					user_data.pop(username)
+			user_data = {username: user_data[username] for username in user_data if username in users}
 
 	sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
 	for lib in sections:
