@@ -266,6 +266,7 @@ class plex_sync:
 		if lib['type'] == 'show':
 			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1'})['MediaContainer'].get('Metadata', [])
 			for show in lib_output:
+				if not 'thumb' in show: continue
 				key = show['Guid'] if 'Guid' in show else show['title']
 				if not str(key) in self.map:
 					target_ratingkey = self.__find_on_target(guid=show['Guid'] if 'Guid' in show else [], title=show['title'] if 'title' in show else '', type='show')
@@ -276,6 +277,7 @@ class plex_sync:
 
 			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1', 'type': '3'})['MediaContainer'].get('Metadata', [])
 			for season in lib_output:
+				if not 'thumb' in season: continue
 				key = season['Guid'] if 'Guid' in season else season['title']
 				if not str(key) in self.map:
 					target_ratingkey = self.__find_on_target(guid=season['Guid'] if 'Guid' in season else [], title=season['title'] if 'title' in season else '', type='season')
