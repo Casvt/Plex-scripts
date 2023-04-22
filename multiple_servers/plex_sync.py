@@ -138,9 +138,9 @@ class plex_sync:
 			elif lib['type'] == 'movie': content_type = '1'
 
 			if any((lib['type'] == 'show' and type == 'show', lib['type'] == 'movie' and type == 'movie')):
-				lib_output = self.__get_data('target',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1'})['MediaContainer']['Metadata']
+				lib_output = self.__get_data('target',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1'})['MediaContainer'].get('Metadata', [])
 			else:
-				lib_output = self.__get_data('target',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1', 'type': content_type})['MediaContainer']['Metadata']
+				lib_output = self.__get_data('target',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1', 'type': content_type})['MediaContainer'].get('Metadata', [])
 			for entry in lib_output:
 				if (guid and 'Guid' in entry and entry['Guid'] == guid) or (title and 'title' in entry and entry['title'] == title):
 					#media found on target server
@@ -187,7 +187,7 @@ class plex_sync:
 		print(f'	{source_collection["title"]}')
 
 		#add collection on target server
-		source_collection_content = self.__get_data('source',f'/library/collections/{source_collection["ratingKey"]}/children', params={'includeGuids': '1'})['MediaContainer']['Metadata']
+		source_collection_content = self.__get_data('source',f'/library/collections/{source_collection["ratingKey"]}/children', params={'includeGuids': '1'})['MediaContainer'].get('Metadata', [])
 		target_collection_content = []
 		for entry in source_collection_content:
 			target_ratingkey = self.__find_on_target(guid=entry['Guid'] if 'Guid' in entry else [], title=entry['title'] if 'title' in entry else '')
@@ -264,7 +264,7 @@ class plex_sync:
 		print(f'	{lib["title"]}')
 		#sync series/season posters
 		if lib['type'] == 'show':
-			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1'})['MediaContainer']['Metadata']
+			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1'})['MediaContainer'].get('Metadata', [])
 			for show in lib_output:
 				key = show['Guid'] if 'Guid' in show else show['title']
 				if not str(key) in self.map:
@@ -274,7 +274,7 @@ class plex_sync:
 
 				tasks.append(session.post(f'{self.target_base_url}/library/metadata/{self.map[str(key)]}/posters', params={'url': f'{self.source_base_url}{show["thumb"]}?X-Plex-Token={self.source_api_token}','X-Plex-Token': self.target_api_token}))
 
-			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1', 'type': '3'})['MediaContainer']['Metadata']
+			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1', 'type': '3'})['MediaContainer'].get('Metadata', [])
 			for season in lib_output:
 				key = season['Guid'] if 'Guid' in season else season['title']
 				if not str(key) in self.map:
@@ -286,7 +286,7 @@ class plex_sync:
 
 		#if said so, skip syncing episode posters
 		if lib['type'] != 'show' or (self.sync_episode_posters == True and lib['type'] == 'show'):
-			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'type': content_type, 'includeGuids': '1'})['MediaContainer']['Metadata']
+			lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'type': content_type, 'includeGuids': '1'})['MediaContainer'].get('Metadata', [])
 			#make map of media: guids or title -> target ratingkey
 			for entry in lib_output:
 				key = entry['Guid'] if 'Guid' in entry else entry['title']
@@ -427,7 +427,7 @@ class plex_sync:
 				print(f'		{lib["title"]}')
 				#sync complete series to skip syncing every episode (reducing requests)
 				if lib['type'] == 'show':
-					lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1'})['MediaContainer']['Metadata']
+					lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'includeGuids': '1'})['MediaContainer'].get('Metadata', [])
 					for show in lib_output:
 						if not (show['viewedLeafCount'] == 0 or show['viewedLeafCount'] == show['leafCount']): continue
 						key = show['Guid'] if 'Guid' in show else show['title']
@@ -444,7 +444,7 @@ class plex_sync:
 							self.target_ssn.get(f'{self.target_base_url}/:/unscrobble', params={'identifier': 'com.plexapp.plugins.library', 'key': self.map[str(key)], 'X-Plex-Token': user_token[2]})
 						handled_series.append(show['ratingKey'])
 
-				lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'type': content_type, 'includeGuids': '1', 'X-Plex-Token': user_token[1]})['MediaContainer']['Metadata']
+				lib_output = self.__get_data('source',f'/library/sections/{lib["key"]}/all', params={'type': content_type, 'includeGuids': '1', 'X-Plex-Token': user_token[1]})['MediaContainer'].get('Metadata', [])
 				#make map of media: guids or title -> target ratingkey
 				for entry in lib_output:
 					if lib['type'] == 'show' and entry['grandparentRatingKey'] in handled_series: continue
