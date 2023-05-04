@@ -31,13 +31,10 @@ def m3u_to_playlist(ssn, library_name: str, file_path: str, users: list=['@me'])
 	# Get tokens of users
 	machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
 	shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers').text
-	result = map(lambda r: r.split('"')[0:7:6], shared_users.split('username="')[1:])
-	user_data = dict(result)
+	user_data = dict(map(lambda r: r.split('"')[0:7:6], shared_users.split('username="')[1:]))
 	user_data['@me'] = plex_api_token
 	if not '@all' in users:
-		for username in user_data.keys():
-			if not username in users:
-				user_data.pop(username)
+		user_data = {k: v for k, v in user_data.items() if k in users}
 
 	# Loop through the libraries
 	sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory', [])
