@@ -209,7 +209,7 @@ class plex_sync:
 			'summary.value': source_collection.get('summary',''),
 			'X-Plex-Token': self.target_api_token
 		}
-		tasks.append(session.put(f'{self.target_base_ur}/library/sections/{target_lib["key"]}/all', params=payload))
+		tasks.append(session.put(f'{self.target_base_url}/library/sections/{target_lib["key"]}/all', params=payload))
 		self.result_json += target_collection_content
 		#launch all the upload requests at the same time
 		await gather(*tasks)
@@ -547,7 +547,7 @@ class plex_sync:
 					'summary': playlist.get('summary',''),
 					'X-Plex-Token': self.target_api_token
 				}
-				self.target_ssn.put(f'{self.target_base_ur}/playlists/{new_ratingkey}', params=payload)
+				self.target_ssn.put(f'{self.target_base_url}/playlists/{new_ratingkey}', params=payload)
 
 				self.result_json += target_playlist_content
 
