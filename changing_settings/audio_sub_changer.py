@@ -3,15 +3,15 @@
 
 """
 The use case of this script is the following:
-	Change the audio/subtitle track, based on target language, forced status, codec, title and/or channel count (audio) for an episode, season, series, movie or entire movie/show library
+	Change the audio/subtitle track, based on target language, forced status, codec, title and/or channel count (audio) for an episode, season, series, movie, entire movie/show library or all libraries
 Requirements (python3 -m pip install [requirement]):
 	requests
 Setup:
 	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
 	You can find examples of the usage below.
 Examples:
-	--Type audio --Language fr --Language en --ChannelCount 6 --Forced avoid --LibraryName Tv-series
-		Set the audio for all episodes of all series in the 'Tv-series' library.
+	--Type audio --Language fr --Language en --ChannelCount 6 --Forced avoid --LibraryName Tv-series --LibraryName Tv-series-2
+		Set the audio for all episodes of all series in the 'Tv-series' and 'Tv-series-2' library.
 		Try to set the audio track to French but otherwise English.
 		If possible, choose the audio stream with 6 channels (5.1) but avoid the stream if it's marked as forced.
 
@@ -129,7 +129,8 @@ def _set_track(
 
 def audio_sub_changer(
 	ssn, type: str, language: list, forced: str, codec: list, title_contains: str, channel_count: int,
-	library_name: str,
+	all: bool, all_movie: bool=False, all_show: bool=False,
+	library_names: List[str]=[],
 	movie_names: list=[],
 	series_name: str=None, season_number: int=None, episode_number: int=None,
 	users: list=['@me']
@@ -137,6 +138,8 @@ def audio_sub_changer(
 	result_json = []
 	language: Dict[str, int] = {l: i for i, l in enumerate(language)}
 	codec: Dict[str, int] = {l: i for i, l in enumerate(codec)}
+	lib_target_specifiers = (library_names,movie_names,series_name,season_number,episode_number)
+	all_target_specifiers = (all_movie, all_show)
 
 	# Check for illegal arg parsing
 	if not language: return 'Language required to be given'
@@ -145,12 +148,18 @@ def audio_sub_changer(
 			return f'Invalid language: {lang}'
 	if not type in types:
 		return 'Unknown type'
-	if season_number is not None and series_name is None:
-		# Season number given but no series name
-		return '"season_number" is set but not "series_name"'
-	if episode_number is not None and (season_number is None or series_name is None):
-		# Episode number given but no season number or no series name
-		return '"episode_number" is set but not "season_number" or "series_name"'
+	if all:
+		if lib_target_specifiers.count(None) < len(lib_target_specifiers) or True in all_target_specifiers:
+			return 'Both "all" and a target-specifier are set'
+	else:
+		if not True in all_target_specifiers and not library_names:
+			return '"all" is set to False but no target-specifier is given'
+		if season_number is not None and series_name is None:
+			# Season number given but no series name
+			return '"season_number" is set but not "series_name"'
+		if episode_number is not None and (season_number is None or series_name is None):
+			# Episode number given but no season number or no series name
+			return '"episode_number" is set but not "season_number" or "series_name"'
 	type = types[type]
 
 	args = {
@@ -172,7 +181,13 @@ def audio_sub_changer(
 
 	sections = ssn.get(f'{base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
 	for lib in sections:
-		if lib['title'] != library_name: continue
+		if not (
+			all and lib['type'] in ('movie', 'show')
+			or all_movie and lib['type'] == 'movie'
+			or all_show and lib['type'] == 'show'
+			or lib['title'] in library_names
+		):
+			continue
 
 		print(lib['title'])
 		lib_output = ssn.get(f'{base_url}/library/sections/{lib["key"]}/all').json()['MediaContainer'].get('Metadata',[])
@@ -259,7 +274,11 @@ if __name__ == '__main__':
 	parser.add_argument('-T', '--TitleContains', type=str, help="Give preference to streams that have the given value in their title", default='')
 	parser.add_argument('-C', '--ChannelCount', type=int, help="AUDIO ONLY: Give preference to streams that have the given amount of audio channels", default=-1)
 
-	parser.add_argument('-l', '--LibraryName', type=str, help="Name of target library", required=True)
+	parser.add_argument('-a','--All', action='store_true', help='Target every media item in every library (use with care!)')
+	parser.add_argument('--AllMovie', action='store_true', help='Target all movie libraries')
+	parser.add_argument('--AllShow', action='store_true', help='Target all show libraries')
+
+	parser.add_argument('-l', '--LibraryName', type=str, help="Name of target library; allowed to give argument multiple times", action='append', default=[], required=True)
 	parser.add_argument('-m', '--MovieName', type=str, help="Target a specific movie inside a movie library based on it's name (only accepted when -l is a movie library); allowed to give argument multiple times", action='append', default=[])
 	parser.add_argument('-s', '--SeriesName', type=str, help="Target a specific series inside a show library based on it's name (only accepted when -l is a show library)")
 	parser.add_argument('-S', '--SeasonNumber', type=int, help="Target a specific season inside the targeted series based on it's number (only accepted when -s is given) (specials is 0)")
@@ -272,13 +291,20 @@ if __name__ == '__main__':
 		ssn=ssn, type=args.Type,
 		language=args.Language, forced=args.Forced, codec=args.Codec,
 		title_contains=args.TitleContains, channel_count=args.ChannelCount,
-		library_name=args.LibraryName,
+		all=args.All, all_movie=args.AllMovie, all_show=args.AllShow,
+		library_names=args.LibraryName,
 		movie_names=args.MovieName,
 		series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber,
 		users=args.User
 	)
 	if not isinstance(response, list):
-		if response == '"season_number" is set but not "series_name"':
+		if response == 'Both "all" and a target-specifier are set':
+			parser.error('Both -a/--All and a target-specifier are set')
+
+		elif response == '"all" is set to False but no target-specifier is given':
+			parser.error('-a/--All is not set but also no target-specifier is set')
+
+		elif response == '"season_number" is set but not "series_name"':
 			parser.error('-S/--SeasonNumber given but not -s/--SeriesName given')
 
 		elif response == '"episode_number" is set but not "season_number" or "series_name"':
