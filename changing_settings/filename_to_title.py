@@ -217,22 +217,19 @@ def filename_to_title(
 		title: list = media['title'].split(" ")
 
 		# Remove current strings and add new ones
-		for s in (*delete_title_string, *add_title_string):
+		for s in (*delete_title_string, *add_title_string, *mappings.values()):
 			try:
 				title.remove(s)
 			except ValueError:
 				pass
 
-		for s in add_title_string:
-			title.append(s)
-
+		add_suffixes = set()
 		for file_string, title_string in mappings.items():
-			try:
-				title.remove(title_string)
-			except ValueError:
-				pass
 			if file_string in filename:
-				title.append(title_string)
+				add_suffixes.add(title_string)
+
+		for s in (*add_title_string, *add_suffixes):
+			title.append(s)
 
 		new_title = " ".join(title)
 		if new_title != media['title']:
