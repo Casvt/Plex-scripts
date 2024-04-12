@@ -17,7 +17,10 @@ plex_api_token = ''
 from os import getenv
 from re import compile
 from fnmatch import filter as fnmatch_filter
-from typing import List
+from typing import TYPE_CHECKING, List
+
+if TYPE_CHECKING:
+	from requests import Session
 
 # Environmental Variables
 plex_ip = getenv('plex_ip', plex_ip)
@@ -27,7 +30,7 @@ base_url = f"http://{plex_ip}:{plex_port}"
 keyword_finder = compile(r'(?<=data-item-keyword=").*?(?=")')
 
 def keywords_to_genre(
-	ssn,
+	ssn: 'Session',
 	keywords: List[str],
 	library_names: List[str],
 	movie_names: List[str]=[],
