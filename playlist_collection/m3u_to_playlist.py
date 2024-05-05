@@ -30,7 +30,7 @@ from os import path
 plex_ip = getenv('plex_ip', plex_ip)
 plex_port = getenv('plex_port', plex_port)
 plex_api_token = getenv('plex_api_token', plex_api_token)
-base_url = f"https://{plex_ip}:{plex_port}"
+base_url = f"http://{plex_ip}:{plex_port}"
 
 def m3u_to_playlist(ssn, library_name: str, file_path: str, users: list=['@me'], library_path: str=''):
 	# Check for illegal arg parsing
