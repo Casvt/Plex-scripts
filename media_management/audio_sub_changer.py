@@ -349,7 +349,7 @@ if __name__ == '__main__':
 	# Setup vars
 	ssn = Session()
 	ssn.headers.update({'Accept': 'application/json'})
-	ssn.params.update({'X-Plex-Token': plex_api_token})
+	ssn.params.update({'X-Plex-Token': plex_api_token}) # type: ignore
 
 	# Setup arg parsing
 	parser = ArgumentParser(description="Change the audio/subtitle track, based on target language, forced status, codec, title strings and/or channel count (audio) for a movie/episode up to all movie/show libraries.")
