@@ -8,6 +8,9 @@ Requirements (python3 -m pip install [requirement]):
 	requests
 Setup:
 	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
+
+Note:
+	This script requires the .m3u file to be linked by an absolute path. If you are running plex one the same computer that is running the script, input the full path. If Plex is running on a different machine, you need to provide the full path to the .m3u file for Plex.
 """
 
 plex_ip = ''
@@ -26,7 +29,7 @@ base_url = f"http://{plex_ip}:{plex_port}"
 def m3u_to_playlist(ssn, library_name: str, file_path: str, users: list=['@me']):
 	# Check for illegal arg parsing
 	if not path.isfile(file_path):
-		return 'File not found'
+		print('File not found locally, this can be intended if your Plex server has a different folder structure from your computer. If this is not intended, please check the provided path.')
 
 	# Get tokens of users
 	machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
