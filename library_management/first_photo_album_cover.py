@@ -51,7 +51,7 @@ def _process_album(
 	# If there are sub-albums, do them first but also note first picture in album
 	for image in album_output:
 		if not 'Media' in image:
-			_process_album(image['key'])
+			_process_album(ssn, image['key'])
 		elif not album_image:
 			album_image = image
 
@@ -162,7 +162,7 @@ if __name__ == '__main__':
 	# Setup vars
 	ssn = Session()
 	ssn.headers.update({'Accept': 'application/json'})
-	ssn.params.update({'X-Plex-Token': plex_api_token})
+	ssn.params.update({'X-Plex-Token': plex_api_token}) # type: ignore
 
 	# Setup arg parsing
 	parser = ArgumentParser(description='The first image in an album will be made the cover of the album.')
