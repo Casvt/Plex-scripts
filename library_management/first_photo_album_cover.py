@@ -42,6 +42,12 @@ def _process_album(
 	ssn: 'Session',
 	album_key: str
 ) -> None:
+	"""Find and set cover for album.
+
+	Args:
+		ssn (Session): The plex requests session to fetch with.
+		album_key (str): The ratingKey of the album.
+	"""
 	album_image = ''
 
 	album_output: List[dict] = ssn.get(
@@ -80,8 +86,8 @@ def _process_album(
 
 def first_photo_album_cover(
 	ssn: 'Session', library_name: List[str],
-	exclude_name: List[str]=[], exclude_regex: List[str]=[],
-	include_name: List[str]=[], include_regex: List[str]=[]
+	exclude_name: List[str] = [], exclude_regex: List[str] = [],
+	include_name: List[str] = [], include_regex: List[str] = []
 ) -> List[int]:
 	"""The first image in an album will be made the cover of the album.
 
