@@ -31,7 +31,7 @@ add_title_string = [] # ['(always add)', '(processed)']
 from dataclasses import dataclass, field
 from os import getenv
 from os.path import basename, splitext
-from typing import TYPE_CHECKING, Any, Generator, List, Mapping
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Mapping
 
 if TYPE_CHECKING:
 	from requests import Session
@@ -39,8 +39,8 @@ if TYPE_CHECKING:
 # Environmental Variables
 plex_base_url = getenv('plex_base_url', plex_base_url)
 plex_api_token = getenv('plex_api_token', plex_api_token)
-mappings = getenv('mappings', mappings)
 base_url = plex_base_url.rstrip('/')
+
 lib_type_mapping = {
 	'movie': 1,
 	'episode': 4
@@ -114,15 +114,15 @@ class LibraryFilter:
 def _get_library_entries(
 	ssn: 'Session',
 	library_filter: LibraryFilter
-) -> Generator[dict, Any, Any]:
+) -> Generator[Dict[str, Any], Any, Any]:
 	"""Get library entries to iterate over.
 
 	Args:
-		ssn (Session): The `requests.Session` to make the requests with.
-		library_filter (LibraryFilter): The filters to apply.
+		ssn (Session): The plex requests session to fetch with.
+		library_filter (LibraryFilter): The filters to apply to the media.
 
 	Yields:
-		Generator[dict, Any, Any]: The resulting media information.
+		Generator[Dict[str, Any], Any, Any]: The resulting media information.
 	"""
 	lf = library_filter
 
@@ -262,22 +262,23 @@ if __name__ == '__main__':
 	# Setup vars
 	ssn = Session()
 	ssn.headers.update({'Accept': 'application/json'})
-	ssn.params.update({'X-Plex-Token': plex_api_token})
+	ssn.params.update({'X-Plex-Token': plex_api_token}) # type: ignore
 
 	# Setup arg parsing
 	parser = ArgumentParser(description='If a string is present in the filename, add a chosen string to the plex title.')
 	parser.add_argument('-l', '--LockField', action='store_true', help='Lock the "title" field in plex after processing the media')
 	parser.add_argument('-i', '--CaseInsensitive', action='store_true', help='Make the matching of the strings in the filename case insensitive')
 
-	parser.add_argument('-a','--All', action='store_true', help='Target every media item in every library (use with care!)')
-	parser.add_argument('--AllMovie', action='store_true', help='Target all movie libraries')
-	parser.add_argument('--AllShow', action='store_true', help='Target all show libraries')
+	ts = parser.add_argument_group(title="Target Selectors")
+	ts.add_argument('-a','--All', action='store_true', help='Target every media item in every library (use with care!)')
+	ts.add_argument('--AllMovie', action='store_true', help='Target all movie libraries')
+	ts.add_argument('--AllShow', action='store_true', help='Target all show libraries')
 
-	parser.add_argument('-l', '--LibraryName', type=str, action='append', help="Name of target library; allowed to give argument multiple times")
-	parser.add_argument('-m', '--MovieName', type=str, action='append', default=[], help="Target a specific movie inside a movie library based on it's name; allowed to give argument multiple times")
-	parser.add_argument('-s', '--SeriesName', type=str, action='append', default=[], help="Target a specific series inside a show library based on it's name")
-	parser.add_argument('-S', '--SeasonNumber', type=int, action='append', default=[], help="Target a specific season inside the targeted series based on it's number (only accepted when -s is given exactly once) (specials is 0); allowed to give argument multiple times")
-	parser.add_argument('-e', '--EpisodeNumber', type=int, action='append', default=[], help="Target a specific episode inside the targeted season based on it's number (only accepted when -S is given exactly once); allowed to give argument multiple times")
+	ts.add_argument('-l', '--LibraryName', type=str, action='append', help="Name of target library; allowed to give argument multiple times")
+	ts.add_argument('-m', '--MovieName', type=str, action='append', default=[], help="Target a specific movie inside a movie library based on it's name; allowed to give argument multiple times")
+	ts.add_argument('-s', '--SeriesName', type=str, action='append', default=[], help="Target a specific series inside a show library based on it's name")
+	ts.add_argument('-S', '--SeasonNumber', type=int, action='append', default=[], help="Target a specific season inside the targeted series based on it's number (only accepted when -s is given exactly once) (specials is 0); allowed to give argument multiple times")
+	ts.add_argument('-e', '--EpisodeNumber', type=int, action='append', default=[], help="Target a specific episode inside the targeted season based on it's number (only accepted when -S is given exactly once); allowed to give argument multiple times")
 
 	args = parser.parse_args()
 
@@ -292,6 +293,7 @@ if __name__ == '__main__':
 			season_numbers=args.SeasonNumber,
 			episode_numbers=args.EpisodeNumber
 		)
+
 	except ValueError as e:
 		parser.error(e.args[0])
 
