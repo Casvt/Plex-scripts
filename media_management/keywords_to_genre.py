@@ -51,12 +51,22 @@ def keywords_to_genre(
 
 	Args:
 		ssn (Session): The plex requests session to fetch with.
+
 		keywords (List[str]): The keywords to search for.
+
 		library_names (List[str]): The names of the libraries to cover.
-		movie_names (List[str], optional): The movie names to cover. Defaults to [].
-		series_names (List[str], optional): The series names to cover. Defaults to [].
-		skip_locked (bool, optional): Skip media if field is locked. Defaults to False.
-		use_label (bool, optional): Add to keywords to labels instead of genres. Defaults to False.
+
+		movie_names (List[str], optional): The movie names to cover.
+			Defaults to [].
+
+		series_names (List[str], optional): The series names to cover.
+			Defaults to [].
+
+		skip_locked (bool, optional): Skip media if field is locked.
+			Defaults to False.
+
+		use_label (bool, optional): Add to keywords to labels instead of genres.
+			Defaults to False.
 
 	Returns:
 		List[int]: List of media rating keys that were processed.
@@ -155,16 +165,18 @@ if __name__ == '__main__':
 	# Setup vars
 	ssn = Session()
 	ssn.headers.update({'Accept': 'application/json'})
-	ssn.params.update({'X-Plex-Token': plex_api_token})
+	ssn.params.update({'X-Plex-Token': plex_api_token}) # type: ignore
 
 	# Setup arg parsing
 	parser = ArgumentParser(description="Add a keyword to the genre/label list in plex if the keyword is present in the keyword list for the media on the IMDB.")
 	parser.add_argument('-k', '--Keyword', type=str, action='append', required=True, help='Keyword that will be added if found in keyword list; allowed to give multiple times; supports wildcards (*)')
-	parser.add_argument('-l', '--LibraryName', type=str, action='append', required=True, help='Name of target library; allowed to give multiple times')
-	parser.add_argument('-m', '--MovieName', type=str, action='append', default=[], help='Name of target movie; allowed to give multiple times')
-	parser.add_argument('-s', '--SeriesName', type=str, action='append', default=[], help='Name of target series; allowed to give multiple times')
 	parser.add_argument('-S', '--SkipLocked', action='store_true', help="Skip media that has it's field locked")
 	parser.add_argument('-L', '--UseLabel', action='store_true', help="Put keywords in label fields instead of genre field")
+
+	ts = parser.add_argument_group(title="Target Selectors")
+	ts.add_argument('-l', '--LibraryName', type=str, action='append', required=True, help='Name of target library; allowed to give multiple times')
+	ts.add_argument('-m', '--MovieName', type=str, action='append', default=[], help='Name of target movie; allowed to give multiple times')
+	ts.add_argument('-s', '--SeriesName', type=str, action='append', default=[], help='Name of target series; allowed to give multiple times')
 
 	args = parser.parse_args()
 
