@@ -310,6 +310,17 @@ def _get_poster_bg_paths(
 	poster_name: str,
 	background_name: str
 ) -> Tuple[Union[str, None], Union[str, None]]:
+	"""Generate name of poster/background file for media.
+
+	Args:
+		media (Dict[str, Any]): The media to generate for.
+		poster_name (str): The name of the default poster file.
+		background_name (str): The name of the default background file.
+
+	Returns:
+		Tuple[Union[str, None], Union[str, None]]: Path to the supposed poster
+		file and path to the supposed background file.
+	"""
 	if media["type"] == "movie":
 		folder = dirname(media.get("Media", [{}])[0].get("Part", [{}])[0].get("file", ""))
 		if not folder:
@@ -385,6 +396,15 @@ def _export(
 	process: List[str],
 	poster_name: str, background_name: str
 ) -> None:
+	"""Export the poster of the media to a file.
+
+	Args:
+		ssn (Session): The plex requests session to fetch with.
+		media (Dict[str, Any]): The media to export for.
+		process (List[str]): The image types to export.
+		poster_name (str): The default poster name.
+		background_name (str): The default background name.
+	"""
 	poster_path, bg_path = _get_poster_bg_paths(
 		media,
 		poster_name,
@@ -427,6 +447,15 @@ def _import(
 	process: List[str],
 	poster_name: str, background_name: str
 ) -> None:
+	"""Import the poster for the media from a file.
+
+	Args:
+		ssn (Session): The plex requests session to fetch with.
+		media (Dict[str, Any]): The media to import for.
+		process (List[str]): The image types to import.
+		poster_name (str): The default poster name.
+		background_name (str): The default background name.
+	"""
 	poster_path, bg_path = _get_poster_bg_paths(
 		media,
 		poster_name,
@@ -470,6 +499,32 @@ def poster_exporter_importer(
 	no_episode_poster: bool = False, no_track_poster: bool = False,
 	poster_name: str = 'poster', background_name: str = 'background'
 ) -> List[int]:
+	"""Export plex posters to external files or import external files into plex.
+
+	Args:
+		ssn (Session): The plex requests session to fetch with.
+
+		library_filter (LibraryFilter): The filter to apply to the media.
+
+		action (ActionType): The type of action to do.
+
+		process (List[str]): What image types to process.
+
+		no_episode_poster (bool, optional): Don't process episodes.
+			Defaults to False.
+
+		no_track_poster (bool, optional): Don't process tracks.
+			Defaults to False.
+
+		poster_name (str, optional): Name of poster files.
+			Defaults to 'poster'.
+
+		background_name (str, optional): Name of background files.
+			Defaults to 'background'.
+
+	Returns:
+		List[int]: List of media rating keys that were processed.
+	"""
 	result_json = []
 
 	method = _export if action == ActionType.EXPORT else _import
@@ -504,20 +559,21 @@ if __name__ == '__main__':
 	parser.add_argument('-P','--PosterName', type=str, default='poster', help='The name of the poster file to search for (importing) or export to (exporting). Default is "poster"')
 	parser.add_argument('-B','--BackgroundName', type=str, default='background', help='The name of the background file to search for (importing) or export to (exporting). Default is "background"')
 
-	parser.add_argument('-a','--All', action='store_true', help='Target every media item in every library (use with care!)')
-	parser.add_argument('--AllMovie', action='store_true', help='Target all movie libraries')
-	parser.add_argument('--AllShow', action='store_true', help='Target all show libraries')
-	parser.add_argument('--AllMusic', action='store_true', help='Target all music libraries')
+	ts = parser.add_argument_group("Target Selectors")
+	ts.add_argument('-a','--All', action='store_true', help='Target every media item in every library (use with care!)')
+	ts.add_argument('--AllMovie', action='store_true', help='Target all movie libraries')
+	ts.add_argument('--AllShow', action='store_true', help='Target all show libraries')
+	ts.add_argument('--AllMusic', action='store_true', help='Target all music libraries')
 
-	parser.add_argument('-l', '--LibraryName', type=str, action='append', help="Name of target library; allowed to give argument multiple times")
-	parser.add_argument('-m', '--MovieName', type=str, action='append', default=[], help="Target a specific movie inside a movie library based on it's name; allowed to give argument multiple times")
-	parser.add_argument('-s', '--SeriesName', type=str, action='append', default=[], help="Target a specific series inside a show library based on it's name; allowed to give argument multiple times")
-	parser.add_argument('-S', '--SeasonNumber', type=int, action='append', default=[], help="Target a specific season inside the targeted series based on it's number (only accepted when -s is given exactly once) (specials is 0); allowed to give argument multiple times")
-	parser.add_argument('-e', '--EpisodeNumber', type=int, action='append', default=[], help="Target a specific episode inside the targeted season based on it's number (only accepted when -S is given exactly once); allowed to give argument multiple times")
-	parser.add_argument('-A', '--ArtistName', type=str, action='append', default=[], help="Target a specific artist inside a music library based on their name; allowed to give argument multiple times")
-	parser.add_argument('-b', '--AlbumName', type=str, action='append', default=[], help="Target a specific album from the targeted artist based on it's name (only accepted when -A is given exactly once); allowed to give argument multiple times")
-	parser.add_argument('-d', '--DiscNumber', type=int, action='append', default=[], help="Target a specific disc from the targeted album based on it's number. Most of the time, it's value should be '1'. (only accepted when -b is given exactly once); allowed to give argument multiple times")
-	parser.add_argument('-n', '--TrackNumber', type=int, action='append', default=[], help="Target a specific track from the targeted disc based on it's number (only accepted when -d is given exactly once); allowed to give argument multiple times")
+	ts.add_argument('-l', '--LibraryName', type=str, action='append', help="Name of target library; allowed to give argument multiple times")
+	ts.add_argument('-m', '--MovieName', type=str, action='append', default=[], help="Target a specific movie inside a movie library based on it's name; allowed to give argument multiple times")
+	ts.add_argument('-s', '--SeriesName', type=str, action='append', default=[], help="Target a specific series inside a show library based on it's name; allowed to give argument multiple times")
+	ts.add_argument('-S', '--SeasonNumber', type=int, action='append', default=[], help="Target a specific season inside the targeted series based on it's number (only accepted when -s is given exactly once) (specials is 0); allowed to give argument multiple times")
+	ts.add_argument('-e', '--EpisodeNumber', type=int, action='append', default=[], help="Target a specific episode inside the targeted season based on it's number (only accepted when -S is given exactly once); allowed to give argument multiple times")
+	ts.add_argument('-A', '--ArtistName', type=str, action='append', default=[], help="Target a specific artist inside a music library based on their name; allowed to give argument multiple times")
+	ts.add_argument('-b', '--AlbumName', type=str, action='append', default=[], help="Target a specific album from the targeted artist based on it's name (only accepted when -A is given exactly once); allowed to give argument multiple times")
+	ts.add_argument('-d', '--DiscNumber', type=int, action='append', default=[], help="Target a specific disc from the targeted album based on it's number. Most of the time, it's value should be '1'. (only accepted when -b is given exactly once); allowed to give argument multiple times")
+	ts.add_argument('-n', '--TrackNumber', type=int, action='append', default=[], help="Target a specific track from the targeted disc based on it's number (only accepted when -d is given exactly once); allowed to give argument multiple times")
 
 	args = parser.parse_args()
 
@@ -537,6 +593,7 @@ if __name__ == '__main__':
 			discs=args.DiscNumber,
 			tracks=args.TrackNumber
 		)
+
 	except ValueError as e:
 		parser.error(e.args[0])
 
