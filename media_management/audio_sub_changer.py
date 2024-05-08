@@ -158,15 +158,15 @@ class LibraryFilter:
 def _get_library_entries(
 	ssn: 'Session',
 	library_filter: LibraryFilter
-) -> Generator[dict, Any, Any]:
+) -> Generator[Dict[str, Any], Any, Any]:
 	"""Get library entries to iterate over.
 
 	Args:
-		ssn (Session): The `requests.Session` to make the requests with.
-		library_filter (LibraryFilter): The filters to apply.
+		ssn (Session): The plex requests session to fetch with.
+		library_filter (LibraryFilter): The filters to apply to the media.
 
 	Yields:
-		Generator[dict, Any, Any]: The resulting media information.
+		Generator[Dict[str, Any], Any, Any]: The resulting media information.
 	"""
 	lf = library_filter
 
@@ -221,7 +221,16 @@ def _get_library_entries(
 
 
 def _gather_user_tokens(ssn: 'Session', users: List[str] = ['@me']) -> List[str]:
-	"Get api tokens based on user list"
+	"""Get api tokens based on user list.
+
+	Args:
+		ssn (Session): The plex requests session to fetch with.
+		users (List[str], optional): The list of users to get the tokens of.
+			Defaults to ['@me'].
+
+	Returns:
+		List[str]: The list of tokens.
+	"""
 	machine_id = ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
 	shared_users = ssn.get(f'http://plex.tv/api/servers/{machine_id}/shared_servers').text
 	user_data = dict(map(lambda r: r.split('"')[0:7:6], shared_users.split('username="')[1:]))
@@ -236,7 +245,15 @@ def _sort_streams(
 	stream: dict,
 	stream_filter: StreamFilter
 ) -> tuple:
-	"Give ranking to a stream based on what is prefered"
+	"""Give a sorting position for a stream based on preference.
+
+	Args:
+		stream (dict): The stream to give the sorting position for.
+		stream_filter (StreamFilter): The preference to base the position on.
+
+	Returns:
+		tuple: The sorting position.
+	"""
 	sf = stream_filter
 
 	return (
@@ -256,7 +273,18 @@ def _set_track(
 	ssn: 'Session', user_tokens: List[str], rating_key: str,
 	type: TrackType, stream_filter: StreamFilter
 ) -> bool:
-	"Scans the tracks of the media and determine the best one and apply it"
+	"""Select a track for the media based on preferences.
+
+	Args:
+		ssn (Session): The plex requests session to fetch with.
+		user_tokens (List[str]): The tokens of the users to set the track for.
+		rating_key (str): The ratingKey of the media to process.
+		type (TrackType): The type of track to evaluate.
+		stream_filter (StreamFilter): The preferences.
+
+	Returns:
+		bool: Whether or not the selection has been updated.
+	"""
 	updated = False
 	media_output: Dict[str, List[Dict[str, List[Dict[str, List[dict]]]]]] = ssn.get(
 		f'{base_url}/library/metadata/{rating_key}'
@@ -317,7 +345,8 @@ def audio_sub_changer(
 		library_filter (LibraryFilter): The filter to apply to the media.
 		type (TrackType): The type of media track that needs to be changed.
 		stream_filter (StreamFilter): The stream preference to base the selection on.
-		users (List[str], optional): The list of users to apply the selection for. Defaults to ['@me'].
+		users (List[str], optional): The list of users to apply the selection for.
+			Defaults to ['@me'].
 
 	Returns:
 		List[int]: List of media rating keys that were processed.
@@ -353,24 +382,26 @@ if __name__ == '__main__':
 
 	# Setup arg parsing
 	parser = ArgumentParser(description="Change the audio/subtitle track, based on target language, forced status, codec, title strings and/or channel count (audio) for a movie/episode up to all movie/show libraries.")
-	parser.add_argument('-t', '--Type', choices=TrackType._member_names_, help="Give the type of stream to change", required=True)
+	parser.add_argument('-t', '--Type', choices=TrackType._member_names_, required=True, help="Give the type of stream to change")
 
-	parser.add_argument('-L', '--Language', type=str, action='append', required=True, help="ISO-639-1 language code (2 lowercase letters e.g. 'en') to try to set the stream to; give multiple times to setup a preference order")
-	parser.add_argument('-f', '--Forced', choices=['avoid', 'prefer'], default='avoid', help='How forced streams should be treated; default is "avoid"')
-	parser.add_argument('-c', '--Codec', type=str, action='append', default=[], help="Name of stream codec to prefer; give multiple times to setup a preference order")
-	parser.add_argument('-T', '--TitleContains', type=str, action='append', default=[], help="Give preference to streams that have the given value in their title")
-	parser.add_argument('-C', '--ChannelCount', type=int, default=None, help="AUDIO ONLY: Give preference to streams that have the given amount of audio channels")
+	ps = parser.add_argument_group(title="Preference Settings")
+	ps.add_argument('-L', '--Language', type=str, action='append', required=True, help="ISO-639-1 language code (2 lowercase letters e.g. 'en') to try to set the stream to; give multiple times to setup a preference order")
+	ps.add_argument('-f', '--Forced', choices=['avoid', 'prefer'], default='avoid', help='How forced streams should be treated; default is "avoid"')
+	ps.add_argument('-c', '--Codec', type=str, action='append', default=[], help="Name of stream codec to prefer; give multiple times to setup a preference order")
+	ps.add_argument('-T', '--TitleContains', type=str, action='append', default=[], help="Give preference to streams that have the given value in their title")
+	ps.add_argument('-C', '--ChannelCount', type=int, default=None, help="AUDIO ONLY: Give preference to streams that have the given amount of audio channels")
 
-	parser.add_argument('-a','--All', action='store_true', help='Target every media item in every library (use with care!)')
-	parser.add_argument('--AllMovie', action='store_true', help='Target all movie libraries')
-	parser.add_argument('--AllShow', action='store_true', help='Target all show libraries')
+	ts = parser.add_argument_group(title="Target Selectors")
+	ts.add_argument('-a','--All', action='store_true', help='Target every media item in every library (use with care!)')
+	ts.add_argument('--AllMovie', action='store_true', help='Target all movie libraries')
+	ts.add_argument('--AllShow', action='store_true', help='Target all show libraries')
 
-	parser.add_argument('-l', '--LibraryName', type=str, action='append', help="Name of target library; allowed to give argument multiple times")
-	parser.add_argument('-m', '--MovieName', type=str, action='append', default=[], help="Target a specific movie inside a movie library based on it's name; allowed to give argument multiple times")
-	parser.add_argument('-s', '--SeriesName', type=str, action='append', default=[], help="Target a specific series inside a show library based on it's name")
-	parser.add_argument('-S', '--SeasonNumber', type=int, action='append', default=[], help="Target a specific season inside the targeted series based on it's number (only accepted when -s is given exactly once) (specials is 0); allowed to give argument multiple times")
-	parser.add_argument('-e', '--EpisodeNumber', type=int, action='append', default=[], help="Target a specific episode inside the targeted season based on it's number (only accepted when -S is given exactly once); allowed to give argument multiple times")
-	parser.add_argument('-u', '--User', type=str, action='append', default=['@me'], help="Select the user(s) to apply this script to; Give username, '@me' for yourself or '@all' for everyone; allowed to give argument multiple times")
+	ts.add_argument('-l', '--LibraryName', type=str, action='append', help="Name of target library; allowed to give argument multiple times")
+	ts.add_argument('-m', '--MovieName', type=str, action='append', default=[], help="Target a specific movie inside a movie library based on it's name; allowed to give argument multiple times")
+	ts.add_argument('-s', '--SeriesName', type=str, action='append', default=[], help="Target a specific series inside a show library based on it's name")
+	ts.add_argument('-S', '--SeasonNumber', type=int, action='append', default=[], help="Target a specific season inside the targeted series based on it's number (only accepted when -s is given exactly once) (specials is 0); allowed to give argument multiple times")
+	ts.add_argument('-e', '--EpisodeNumber', type=int, action='append', default=[], help="Target a specific episode inside the targeted season based on it's number (only accepted when -S is given exactly once); allowed to give argument multiple times")
+	ts.add_argument('-u', '--User', type=str, action='append', default=['@me'], help="Select the user(s) to apply this script to; Give username, '@me' for yourself or '@all' for everyone; allowed to give argument multiple times")
 
 	args = parser.parse_args()
 
@@ -385,10 +416,7 @@ if __name__ == '__main__':
 			season_numbers=args.SeasonNumber,
 			episode_numbers=args.EpisodeNumber
 		)
-	except ValueError as e:
-		parser.error(e.args[0])
 
-	try:
 		sf = StreamFilter(
 			language=args.Language,
 			prefer_forced=args.Forced == 'prefer',
@@ -396,6 +424,7 @@ if __name__ == '__main__':
 			title_contains=args.TitleContains,
 			channel_count=args.ChannelCount
 		)
+
 	except ValueError as e:
 		parser.error(e.args[0])
 
