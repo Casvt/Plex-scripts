@@ -380,7 +380,8 @@ def intro_marker_editor(
 	action: Action,
 	library_filter: LibraryFilter, marker_option: MarkerOption
 ) -> List[int]:
-	"""Edit the intro and credit markers of plex media. Requires script to be run with root (a.k.a. administrator) privileges.
+	"""Edit the intro and credit markers of plex media.
+	Editing requires script to be run with root (a.k.a. administrator) privileges.
 
 	Args:
 		action (Action): The type of action to do on the markers
@@ -423,8 +424,8 @@ def intro_marker_editor(
 
 	# Create connection to plex database
 	db = connect(db_location, timeout=20.0)
+	db.row_factory = Row
 	cursor = db.cursor()
-	cursor.row_factory = Row
 
 	if action in (Action.EDIT, Action.REMOVE):
 		cursor.execute(
@@ -432,7 +433,7 @@ def intro_marker_editor(
 			(mo.marker_number,)
 		)
 		if cursor.fetchone() is None:
-			return 'Intro number not found'
+			raise ValueError('Marker number not found')
 
 		if action == Action.EDIT:
 			cursor.execute(
@@ -520,11 +521,12 @@ if __name__ == '__main__':
 	parser.add_argument('-E', '--MarkerEnd', type=str, default=None, help='ADD/EDIT ONLY: The ending time of the marker. Supported formats are miliseconds and MM:SS')
 	parser.add_argument('-O', '--MarkerOffset', type=int, default=None, help='SHIFT ONLY: The amount to shift the marker(s) in seconds (negative values supported using quotes e.g. "-5")')
 
-	parser.add_argument('-l', '--LibraryName', type=str, default=None, help="LIST/ADD/SHIFT ONLY: Name of target library")
-	parser.add_argument('-m', '--MovieName', type=str, default=None, help="LIST/ADD/SHIFT ONLY: Name of the movie in the movie library to target (only accepted when -l is a movie library)")
-	parser.add_argument('-s', '--SeriesName', type=str, default=None, help="LIST/ADD/SHIFT ONLY: Name of the series in the series library to target (only accepted when -s is a series library)")
-	parser.add_argument('-S', '--SeasonNumber', type=int, default=None, help="LIST/ADD/SHIFT ONLY: Target a specific season inside the targeted series based on it's number (only accepted when -s is given) (specials is 0)")
-	parser.add_argument('-e', '--EpisodeNumber', type=int, default=None, help="LIST/ADD/SHIFT ONLY: Target a specific episode inside the targeted season based on it's number (only accepted when -S is given)")
+	ts = parser.add_argument_group(title="Target Selectors")
+	ts.add_argument('-l', '--LibraryName', type=str, default=None, help="LIST/ADD/SHIFT ONLY: Name of target library")
+	ts.add_argument('-m', '--MovieName', type=str, default=None, help="LIST/ADD/SHIFT ONLY: Name of the movie in the movie library to target (only accepted when -l is a movie library)")
+	ts.add_argument('-s', '--SeriesName', type=str, default=None, help="LIST/ADD/SHIFT ONLY: Name of the series in the series library to target (only accepted when -s is a series library)")
+	ts.add_argument('-S', '--SeasonNumber', type=int, default=None, help="LIST/ADD/SHIFT ONLY: Target a specific season inside the targeted series based on it's number (only accepted when -s is given) (specials is 0)")
+	ts.add_argument('-e', '--EpisodeNumber', type=int, default=None, help="LIST/ADD/SHIFT ONLY: Target a specific episode inside the targeted season based on it's number (only accepted when -S is given)")
 
 	args = parser.parse_args()
 
