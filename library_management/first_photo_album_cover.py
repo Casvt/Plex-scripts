@@ -172,7 +172,7 @@ if __name__ == '__main__':
 
 	# Setup arg parsing
 	parser = ArgumentParser(description='The first image in an album will be made the cover of the album.')
-	parser.add_argument('-l','--LibraryName', type=str, action='append', required=True, help='Name of target library; allowed to give argument multiple times')
+	parser.add_argument('-l','--LibraryName', type=str, action='append', default=[], required=True, help='Name of target library; allowed to give argument multiple times')
 	parser.add_argument('-e','--ExcludeName', type=str, action='append', default=[], help='Give name of album to exclude from processing; allowed to give argument multiple times')
 	parser.add_argument('-E','--ExcludeRegex', type=str, action='append', default=[], help='Give regex where matching album names are excluded from processing; allowed to give argument multiple times')
 	parser.add_argument('-i','--IncludeName', type=str, action='append', default=[], help='Give name of album to only process; overrides -e/--ExcludeName; allowed to give argument multiple times')

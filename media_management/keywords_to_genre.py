@@ -155,6 +155,7 @@ def keywords_to_genre(
 			ssn.put(f'{base_url}/library/sections/{lib["key"]}/all', params=payload)
 
 			result_json.append(media['ratingKey'])
+
 	return result_json
 
 if __name__ == '__main__':
@@ -174,7 +175,7 @@ if __name__ == '__main__':
 	parser.add_argument('-L', '--UseLabel', action='store_true', help="Put keywords in label fields instead of genre field")
 
 	ts = parser.add_argument_group(title="Target Selectors")
-	ts.add_argument('-l', '--LibraryName', type=str, action='append', required=True, help='Name of target library; allowed to give multiple times')
+	ts.add_argument('-l', '--LibraryName', type=str, action='append', default=[], required=True, help='Name of target library; allowed to give multiple times')
 	ts.add_argument('-m', '--MovieName', type=str, action='append', default=[], help='Name of target movie; allowed to give multiple times')
 	ts.add_argument('-s', '--SeriesName', type=str, action='append', default=[], help='Name of target series; allowed to give multiple times')
 
