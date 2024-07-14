@@ -132,8 +132,9 @@ dmypy.json
 *.code-workspace
 .vscode/
 
-# pre-commit
+# project files
 .pre-commit-config.yaml
+pyproject.toml
 
 # Database files
 *.db
