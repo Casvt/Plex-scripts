@@ -17,6 +17,7 @@ Setup:
 """
 
 from dataclasses import dataclass, field
+from json import loads
 from os import getenv
 from os.path import basename, splitext
 from typing import TYPE_CHECKING, Any, Dict, Generator, List, Mapping
@@ -39,6 +40,15 @@ add_title_string = [] # ['(always add)', '(processed)']
 # Environmental Variables
 plex_base_url = getenv('plex_base_url', plex_base_url)
 plex_api_token = getenv('plex_api_token', plex_api_token)
+_mappings = getenv('mappings')
+if _mappings:
+    mappings: Dict[str, str] = loads(_mappings)
+_delete_title_string = getenv('delete_title_string')
+if _delete_title_string:
+    delete_title_string: List[str] = loads(_delete_title_string)
+_add_title_string = getenv('add_title_string')
+if _add_title_string:
+    add_title_string: List[str] = loads(_add_title_string)
 base_url = plex_base_url.rstrip('/')
 
 lib_type_mapping = {
