@@ -226,6 +226,22 @@ def auto_optimize(
     library_filter: LibraryFilter,
     limit: int = -1
 ) -> List[int]:
+    """Optimize the targeted media if it isn't already.
+
+    Args:
+        ssn (Session): The plex requests session to fetch with.
+        plex (PlexServer): The plex instance to optimize with.
+        profile (str): The optimization profile.
+        library_filter (LibraryFilter): The filter to apply to the media.
+        limit (int, optional): The max amount of media to optimize in one run.
+            Defaults to -1.
+
+    Raises:
+        ValueError: Invalid profile.
+
+    Returns:
+        List[int]: List of media rating keys that were processed.
+    """
     result_json = []
     counter = 0
 
