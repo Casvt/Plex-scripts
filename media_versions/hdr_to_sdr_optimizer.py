@@ -213,13 +213,13 @@ def _optimize_check(
     return False
 
 
-def auto_optimize(
+def hdr_to_sdr_optimizer(
     ssn: 'Session',
     plex: 'PlexServer',
     library_filter: LibraryFilter,
     limit: int = -1
 ) -> List[int]:
-    """Optimize the targeted media if it isn't already.
+    """Optimize HDR media when it isn't already available in SDR.
 
     Args:
         ssn (Session): The plex requests session to fetch with.
@@ -227,9 +227,6 @@ def auto_optimize(
         library_filter (LibraryFilter): The filter to apply to the media.
         limit (int, optional): The max amount of media to optimize in one run.
             Defaults to -1.
-
-    Raises:
-        ValueError: Invalid profile.
 
     Returns:
         List[int]: List of media rating keys that were processed.
@@ -303,7 +300,7 @@ if __name__ == '__main__':
     except ValueError as e:
         parser.error(e.args[0])
 
-    auto_optimize(
+    hdr_to_sdr_optimizer(
         ssn=ssn,
         plex=plex,
         library_filter=lf,
