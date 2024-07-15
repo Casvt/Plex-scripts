@@ -1,370 +1,524 @@
 #!/usr/bin/env python3
-#-*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """
 The use case of this script is the following:
-	Up- or downgrade media if it falls under the defined rules
-	Radarr: script will change quality profile of movie and initiate search for it
-	Sonarr: script will change quality profile of series, initiate search for episodes and change quality profile of series back
+    Up- or downgrade media if it falls under the defined rules.
+    Radarr: script will change quality profile of movie and initiate search for it.
+    Sonarr: script will change quality profile of series, initiate search for episodes and change quality profile of series back.
+
 Requirements (python3 -m pip install [requirement]):
-	requests
+    requests
+
 Setup:
-	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
+    1. Fill the variables below.
+    2. Run the script in a terminal/shell with the "-h" flag to learn more about the parameters.
+        python3 auto_upgrade_media.py -h
+        or
+        python auto_upgrade_media.py -h
+
+Examples:
+    Coming Soon.
 """
 
-plex_ip = ''
-plex_port = ''
-plex_api_token = ''
-
-triggers = {
-	#Define when to up- or downgrade media
-	#Give -1 to never go to that resolution/don't use trigger
-	#If you have multiple triggers setup, there is an AND correlation between them:
-	#	That means that all triggers for a resolution must match in order for media to go to that resolution
-	#	So you have to remove some of the triggers below to set it up how you want it
-	'days_not_watched': {
-		'480': 1095, #1095 (3 years) days ago watched -> 480p
-		'720': 365, #365-1094 days ago watched -> 720p
-		'1080': 40, #40-364 days ago watched -> 1080p
-		'4k': 0 #0-39 days ago watched -> 4k
-	},
-	'viewcount': {
-		'480': -1,
-		'720': 1, #0-2 times watched -> 720p
-		'1080': 3, #3-4 times watched -> 1080p
-		'4k': 5 #5+ times watched -> 4k
-	},
-	'inverted_viewcount': {
-		'480': -1,
-		'720': -1,
-		'1080': 1, #1+ times watched -> 1080p
-		'4k': 0 #0 times watched -> 4k
-	}
-}
-
-use_radarr = True
-radarr_ip = ''
-radarr_port = ''
-radarr_api_token = ''
-radarr_config = {
-	#define desired applied radarr profile for each resolution
-	#leave a value empty to not up- or downgrade any further
-	'480': '',
-	'720': '',
-	'1080': '',
-	'4k': ''
-}
-
-use_sonarr = True
-sonarr_ip = ''
-sonarr_port = ''
-sonarr_api_token = ''
-sonarr_config = {
-	#define desired applied sonarr profile for each resolution
-	#leave a value empty to not up- or downgrade any further
-	'480': '',
-	'720': '',
-	'1080': '',
-	'4k': ''
-}
-
+from dataclasses import dataclass, field
+from json import loads
 from os import getenv
 from time import time
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Set, Union
+
+if TYPE_CHECKING:
+    from requests import Session
+
+# ===== FILL THESE VARIABLES =====
+plex_base_url = ''
+plex_api_token = ''
+
+# Either radarr, sonarr or both
+radarr_base_url = ''
+radarr_api_token = ''
+
+# Either radarr, sonarr or both
+sonarr_base_url = ''
+sonarr_api_token = ''
+
+radarr_mapping = {
+    # Define desired applied Radarr profile for each resolution
+    # Leave a value empty to not up- or downgrade any further
+    '480': '',
+    '720': '',
+    '1080': '',
+    '4k': ''
+}
+
+sonarr_mapping = {
+    # Define desired applied Sonarr profile for each resolution
+    # Leave a value empty to not up- or downgrade any further
+    '480': '',
+    '720': '',
+    '1080': '',
+    '4k': ''
+}
+
+triggers = {
+    # Define when to up- or downgrade media
+    # Give -1 to never go to that resolution/don't use trigger
+    # If you have multiple triggers setup, there is an AND correlation between them:
+    #    That means that all triggers for a resolution must match in order for media to go to that resolution
+    #    So you have to remove some of the triggers below to set it up how you want it
+    'days_not_watched': {
+        '480': 1095, # 1095 (3 years) days ago watched -> 480p
+        '720': 365,  # 365-1094 days ago watched -> 720p
+        '1080': 40,  # 40-364 days ago watched -> 1080p
+        '4k': 0      # 0-39 days ago watched -> 4k
+    },
+    'viewcount': {
+        '480': -1,
+        '720': 1,   # 0-2 times watched -> 720p
+        '1080': 3,  # 3-4 times watched -> 1080p
+        '4k': 5     # 5+ times watched -> 4k
+    },
+    'inverted_viewcount': {
+        '480': -1,
+        '720': -1,
+        '1080': 1,  # 1+ times watched -> 1080p
+        '4k': 0     # 0 times watched -> 4k
+    }
+}
+# ================================
 
 # Environmental Variables
-plex_ip = getenv('plex_ip', plex_ip)
-plex_port = getenv('plex_port', plex_port)
+plex_base_url = getenv('plex_base_url', plex_base_url)
 plex_api_token = getenv('plex_api_token', plex_api_token)
-plex_base_url = f"http://{plex_ip}:{plex_port}"
-triggers = getenv('triggers', triggers)
-radarr_ip = getenv('radarr_ip', radarr_ip)
-radarr_port = getenv('radarr_port', radarr_port)
+radarr_base_url = getenv(
+    'radarr_base_url',
+    radarr_base_url).rstrip('/') + '/api/v3'
 radarr_api_token = getenv('radarr_api_token', radarr_api_token)
-radarr_config = getenv('radarr_config', radarr_config)
-use_radarr = getenv('use_radarr', use_radarr)
-radarr_base_url = f'http://{radarr_ip}:{radarr_port}/api/v3'
-sonarr_ip = getenv('sonarr_ip', sonarr_ip)
-sonarr_port = getenv('sonarr_port', sonarr_port)
+sonarr_base_url = getenv(
+    'sonarr_base_url',
+    sonarr_base_url).rstrip('/') + '/api/v3'
 sonarr_api_token = getenv('sonarr_api_token', sonarr_api_token)
-sonarr_config = getenv('sonarr_config', sonarr_config)
-use_sonarr = getenv('use_sonarr', use_sonarr)
-sonarr_base_url = f'http://{sonarr_ip}:{sonarr_port}/api/v3'
+_radarr_mapping = getenv('radarr_mapping')
+if _radarr_mapping:
+    radarr_mapping: Dict[str, str] = loads(_radarr_mapping)
+_sonarr_mapping = getenv('sonarr_mapping')
+if _sonarr_mapping:
+    sonarr_mapping: Dict[str, str] = loads(_sonarr_mapping)
+_triggers = getenv('triggers')
+if _triggers:
+    triggers: Dict[str, Dict[str, int]] = loads(_triggers)
+base_url = plex_base_url.rstrip('/')
 
-resolutions = ('480','720','1080','4k')
-radarr_movies = None
-radarr_profiles = None
-sonarr_profiles = None
-sonarr_series = {}
+resolutions = ('480', '720', '1080', '4k')
 
-def _change_media(type: str, data: dict, desired_resolution: str, radarr_ssn, sonarr_ssn):
-	global radarr_movies, radarr_profiles, sonarr_profiles, sonarr_series
 
-	filepath_current_file = data.get('Media',({}))[0].get('Part',({}))[0].get('file')
-	if filepath_current_file == None: return
+@dataclass
+class LibraryFilter:
+    all: bool = False
+    all_movie: bool = False
+    all_show: bool = False
+    libraries: List[str] = field(default_factory=lambda: [])
+    movies: List[str] = field(default_factory=lambda: [])
+    series: List[str] = field(default_factory=lambda: [])
+    season_numbers: List[int] = field(default_factory=lambda: [])
+    episode_numbers: List[int] = field(default_factory=lambda: [])
 
-	if type == 'movie':
-		print(f'	Setting {data["title"]} ({data["year"]} to {desired_resolution}')
+    def __post_init__(self):
+        self.content_specifiers = (
+            self.libraries,
+            self.movies,
+            self.series, self.season_numbers, self.episode_numbers
+        )
+        self.lib_specifiers = (
+            self.all_movie, self.all_show
+        )
 
-		if radarr_movies == None:
-			radarr_movies = radarr_ssn.get(f'{radarr_base_url}/movie').json()
-		if radarr_profiles == None:
-			radarr_profiles = radarr_ssn.get(f'{radarr_base_url}/qualityprofile').json()
+        if self.all:
+            if (
+                any(self.content_specifiers)
+                or True in self.lib_specifiers
+            ):
+                raise ValueError(
+                    "Can't combine the 'all' target specifier with any other target specifier")
 
-		#find movie in radarr
-		for movie in radarr_movies:
-			if movie.get('movieFile',{}).get('path') == filepath_current_file:
-				movie_id = movie['id']
-				break
-		else:
-			#movie not found in radarr
-			return
+        else:
+            if True not in self.lib_specifiers and not self.libraries:
+                raise ValueError(
+                    "Either have to select all libraries of a type or supply library names")
 
-		#find id of quality profile in radarr
-		for profile in radarr_profiles:
-			if profile['name'] == radarr_config.get(desired_resolution):
-				profile_id = profile['id']
-				break
-		else:
-			#quality profile not found in radarr
-			return
+            if len(self.series) > 1:
+                if self.season_numbers:
+                    # Season numbers with multiple series
+                    raise ValueError(
+                        "Can't give season numbers for multiple series")
 
-		radarr_ssn.put(f'{radarr_base_url}/movie/editor', json={'movieIds': [movie_id], 'qualityProfileId': profile_id})
-		radarr_ssn.post(f'{radarr_base_url}/command', json={'movieIds': [movie_id], 'name': 'MoviesSearch'})
+                elif self.episode_numbers:
+                    # Episode numbers with multiple series
+                    raise ValueError(
+                        "Can't give episode numbers for multiple series")
 
-	elif type == 'episode':
-		print(f'	Setting {data["grandparentTitle"]} - S{data["parentIndex"]}E{data["index"]} - {data["title"]} to {desired_resolution}')
+            elif len(self.series) == 1:
+                if self.episode_numbers:
+                    if not self.season_numbers:
+                        # Episode numbers without a season
+                        raise ValueError(
+                            "Can't give episode numbers without specifying a season number")
 
-		if sonarr_profiles == None:
-			sonarr_profiles = sonarr_ssn.get(f'{sonarr_base_url}/qualityprofile').json()
+                    elif len(self.season_numbers) > 1:
+                        # Episode numbers with multiple seasons
+                        raise ValueError(
+                            "Can't give episode numbers with multiple seasons")
 
-		#find episode in sonarr
-		episode_search = next(iter(sonarr_ssn.get(f'{sonarr_base_url}/parse', params={'path': filepath_current_file}).json().get('episodes',[])), None)
-		if episode_search == None:
-			#episode not found in radarr
-			return
-		series_id = episode_search['seriesId']
+            else:
+                # No series specified
+                if self.season_numbers:
+                    # Season numbers but no series
+                    raise ValueError(
+                        "Can't give season numbers without specifying a series")
 
-		if not series_id in sonarr_series:
-			sonarr_series[series_id] = sonarr_ssn.get(f'{sonarr_base_url}/series/{series_id}').json()
+                elif self.episode_numbers:
+                    # Episode numbers but no series
+                    raise ValueError(
+                        "Can't give episode numbers without specifying a series")
 
-		#find id of quality profile in sonarr
-		for profile in sonarr_profiles:
-			if profile['name'] == sonarr_config.get(desired_resolution):
-				profile_id = profile['id']
-				break
-		else:
-			#quality profile not found in sonarr
-			return
+        return
 
-		current_quality_profile = sonarr_series[series_id]['qualityProfileId']
-		sonarr_series[series_id]['qualityProfileId'] = profile_id
-		sonarr_ssn.put(f'{sonarr_base_url}/series/{series_id}', json=sonarr_series[series_id], params={'apikey': sonarr_api_token})
-		sonarr_ssn.post(f'{sonarr_base_url}/command', json={'name': 'EpisodeSearch', 'episodeIds': [episode_search['id']]})
-		sonarr_series[series_id]['qualityProfileId'] = current_quality_profile
-		sonarr_ssn.put(f'{sonarr_base_url}/series/{series_id}', json=sonarr_series[series_id], params={'apikey': sonarr_api_token})
 
-	return
+def _get_library_entries(
+    ssn: 'Session',
+    library_filter: LibraryFilter
+) -> Generator[Dict[str, Any], Any, Any]:
+    """Get library entries to iterate over.
 
-def _process_media(type: str, data: dict, radarr_ssn, sonarr_ssn):
-	if type == 'movie' and use_radarr == False: return
-	if type == 'episode' and use_sonarr == False: return
+    Args:
+        ssn (Session): The plex requests session to fetch with.
+        library_filter (LibraryFilter): The filters to apply to the media.
 
-	current_time = time()
-	desired_resolutions = set()
-	days_not_watched = (current_time - data.get('lastViewedAt',current_time + 1)) / 86400
-	viewcount = data.get('viewCount',0)
+    Yields:
+        Generator[Dict[str, Any], Any, Any]: The resulting media information.
+    """
+    lf = library_filter
 
-	if 'days_not_watched' in triggers and days_not_watched >= 0:
-		for resolution in resolutions:
-			days = triggers.get('days_not_watched',{}).get(resolution, -1)
-			if days == -1: continue
-			if days_not_watched >= days:
-				#found desired resolution based on days_not_watched
-				desired_resolutions.add(resolution)
-				break
+    sections: List[dict] = ssn.get(
+        f'{base_url}/library/sections'
+    ).json()['MediaContainer'].get('Directory', [])
 
-	if 'viewcount' in triggers:
-		for resolution in reversed(resolutions):
-			views = triggers.get('viewcount',{}).get(resolution, -1)
-			if views == -1: continue
-			if viewcount >= views:
-				#found desired resolution based on viewcount
-				desired_resolutions.add(resolution)
-				break
+    for lib in sections:
+        if not (
+            lib['type'] in ('movie', 'show')
+            and
+                lf.all
+                or lf.all_movie and lib['type'] == 'movie'
+                or lf.all_show and lib['type'] == 'show'
+                or lf.libraries and lib['title'] in lf.libraries
+        ):
+            continue
 
-	if 'inverted_viewcount' in triggers:
-		for resolution in resolutions:
-			views = triggers.get('inverted_viewcount',{}).get(resolution, -1)
-			if views == -1: continue
-			if viewcount >= views:
-				#found desired resolution based on inverted_viewcount
-				desired_resolutions.add(resolution)
-				break
+        print(lib['title'])
+        lib_output: List[dict] = ssn.get(
+            f'{base_url}/library/sections/{lib["key"]}/all'
+        ).json()['MediaContainer'].get('Metadata', [])
 
-	if len(desired_resolutions) == 1 \
-	and data.get('Media',({}))[0].get('videoResolution') != desired_resolutions[0] \
-	and ( \
-		(type == 'movie' and radarr_config.get(desired_resolutions[0], '') != '') \
-		or (type == 'episode' and sonarr_config.get(desired_resolutions[0], '') != '') \
-	):
-		#up- or downgrade media
-		_change_media(type=type, data=data,desired_resolution=desired_resolutions[0], radarr_ssn=radarr_ssn, sonarr_ssn=sonarr_ssn)
+        if lib['type'] == 'movie':
+            for movie in lib_output:
+                if lf.movies and not movie['title'] in lf.movies:
+                    continue
 
-	return
+                print(f'    {movie["title"]}')
+                yield movie
+
+        elif lib['type'] == 'show':
+            for show in lib_output:
+                if lf.series and not show['title'] in lf.series:
+                    continue
+
+                print(f'    {show["title"]}')
+                show_output: List[dict] = ssn.get(
+                    f'{base_url}/library/metadata/{show["ratingKey"]}/allLeaves'
+                ).json()['MediaContainer'].get('Metadata', [])
+
+                for episode in show_output:
+                    if (
+                        lf.season_numbers
+                        and not episode['parentIndex'] in lf.season_numbers
+                    ):
+                        continue
+
+                    if (
+                        lf.episode_numbers
+                        and not episode['index'] in lf.episode_numbers
+                    ):
+                        continue
+
+                    print(
+                        f'        S{episode["parentIndex"]}E{episode["index"]}')
+                    yield episode
+    return
+
+
+movie_cache: List[Dict[str, Any]] = []
+series_cache: Dict[int, Dict[str, Any]] = {}
+r_profiles_cache: List[Dict[str, Any]] = []
+s_profiles_cache: List[Dict[str, Any]] = []
+
+
+def _change_media(
+    radarr_ssn: 'Session',
+    sonarr_ssn: 'Session',
+    media: Dict[str, Any],
+    resolution: str
+):
+    filepath_current_file = (
+        media
+        .get('Media', [{}])[0]
+        .get('Part', [{}])[0]
+        .get('file')
+    )
+    if not filepath_current_file:
+        return
+
+    if media['type'] == 'movie':
+        print(f'        Setting to {resolution}')
+
+        if not movie_cache:
+            movie_cache.extend(
+                radarr_ssn.get(f'{radarr_base_url}/movie').json()
+            )
+        if not r_profiles_cache:
+            r_profiles_cache.extend(
+                radarr_ssn.get(f'{radarr_base_url}/qualityprofile').json()
+            )
+
+        # Find movie in radarr
+        for movie in movie_cache:
+            if movie.get('movieFile', {}).get('path') == filepath_current_file:
+                movie_id = movie['id']
+                break
+        else:
+            return
+
+        # Find id of quality profile in radarr
+        for profile in r_profiles_cache:
+            if profile['name'] == radarr_mapping.get(resolution):
+                profile_id = profile['id']
+                break
+        else:
+            return
+
+        radarr_ssn.put(
+            f'{radarr_base_url}/movie/editor',
+            json={
+                'movieIds': [movie_id],
+                'qualityProfileId': profile_id
+            }
+        )
+        radarr_ssn.post(
+            f'{radarr_base_url}/command',
+            json={
+                'movieIds': [movie_id],
+                'name': 'MoviesSearch'
+            }
+        )
+
+    elif media['type'] == 'episode':
+        print(f'            Setting to {resolution}')
+
+        if not s_profiles_cache:
+            s_profiles_cache.extend(
+                sonarr_ssn.get(f'{sonarr_base_url}/qualityprofile').json()
+            )
+
+        # Find episode in sonarr
+        episode_search: Union[Dict[str, Any], None] = next(
+            iter(
+                sonarr_ssn.get(
+                    f'{sonarr_base_url}/parse',
+                    params={'path': filepath_current_file}
+                ).json().get('episodes', [])
+            ),
+            None
+        )
+        if not episode_search:
+            return
+        series_id: int = episode_search['seriesId']
+
+        if series_id not in series_cache:
+            series_cache[series_id] = sonarr_ssn.get(
+                f'{sonarr_base_url}/series/{series_id}'
+            ).json()
+
+        # Find id of quality profile in sonarr
+        for profile in s_profiles_cache:
+            if profile['name'] == sonarr_mapping.get(resolution):
+                profile_id: int = profile['id']
+                break
+        else:
+            return
+
+        current_qp: int = series_cache[series_id]['qualityProfileId']
+        series_cache[series_id]['qualityProfileId'] = profile_id
+        sonarr_ssn.put(
+            f'{sonarr_base_url}/series/{series_id}',
+            json=series_cache[series_id]
+        )
+        sonarr_ssn.post(
+            f'{sonarr_base_url}/command',
+            json={
+                'name': 'EpisodeSearch',
+                'episodeIds': [episode_search['id']]
+            }
+        )
+        series_cache[series_id]['qualityProfileId'] = current_qp
+        sonarr_ssn.put(
+            f'{sonarr_base_url}/series/{series_id}',
+            json=series_cache[series_id]
+        )
+
+    return
+
+
+def _process_media(
+    radarr_ssn: 'Session',
+    sonarr_ssn: 'Session',
+    media: Dict[str, Any]
+) -> None:
+    current_time = time()
+    desired_resolutions: Set[str] = set()
+    current_resolution = (
+        media
+        .get('Media', [{}])[0]
+        .get('videoResolution')
+    )
+
+    viewcount = media.get('viewCount', 0)
+    days_not_watched: float = (
+        (current_time - media.get('lastViewedAt', current_time + 1))
+        /
+        86400
+    )
+
+    if not current_resolution:
+        return
+
+    if 'days_not_watched' in triggers and days_not_watched >= 0:
+        for resolution in resolutions:
+            days = triggers['days_not_watched'].get(resolution, -1)
+            if days_not_watched >= days > -1:
+                # Found desired resolution based on days_not_watched
+                desired_resolutions.add(resolution)
+                break
+
+    if 'viewcount' in triggers:
+        for resolution in reversed(resolutions):
+            views = triggers['viewcount'].get(resolution, -1)
+            if viewcount >= views > -1:
+                # Found desired resolution based on viewcount
+                desired_resolutions.add(resolution)
+                break
+
+    if 'inverted_viewcount' in triggers:
+        for resolution in resolutions:
+            views = triggers['inverted_viewcount'].get(resolution, -1)
+            if viewcount >= views > -1:
+                # Found desired resolution based on inverted_viewcount
+                desired_resolutions.add(resolution)
+                break
+
+    results = list(desired_resolutions)
+    if len(results) != 1:
+        return
+
+    result = results[0]
+    if (
+        current_resolution != result
+        and (
+            (radarr_mapping if media['type'] == 'movie' else sonarr_mapping)
+            .get(result) or ''
+        ) != ''
+    ):
+        # Up- or downgrade media
+        _change_media(
+            radarr_ssn=radarr_ssn, sonarr_ssn=sonarr_ssn,
+            media=media, resolution=result
+        )
+
+    return
+
 
 def auto_upgrade_media(
-	plex_ssn, radarr_ssn, sonarr_ssn,
-	all: bool, all_movie: bool=False, all_show: bool=False,
-	library_name: str=None,
-	movie_name: str=None,
-	series_name: str=None, season_number: int=None, episode_number: int=None
-):
-	result_json = []
-	lib_target_specifiers = (library_name,movie_name,series_name,season_number,episode_number)
-	all_target_specifiers = (all_movie, all_show)
+    plex_ssn: 'Session',
+    radarr_ssn: 'Session',
+    sonarr_ssn: 'Session',
+    library_filter: LibraryFilter
+) -> List[int]:
+    result_json = []
 
-	#check for illegal arg parsing
-	if use_sonarr == False and use_radarr == False:
-		return 'Both sonarr and radarr are disabled'
-	if all == True:
-		if lib_target_specifiers.count(None) < len(lib_target_specifiers) or True in all_target_specifiers:
-			return 'Both "all" and a target-specifier are set'
+    radarr_enabled = radarr_base_url != '' and radarr_api_token != ''
+    sonarr_enabled = sonarr_base_url != '' and sonarr_api_token != ''
+    if not (radarr_enabled or sonarr_enabled):
+        raise ValueError("Either Sonarr or Radarr needs to be set up")
 
-	else:
-		if not True in all_target_specifiers and library_name == None:
-			return '"all" is set to False but no target-specifier is given'
-		if season_number != None and series_name == None:
-			return '"season_number" is set but not "series_name"'
-		if episode_number != None and (season_number == None or series_name == None):
-			return '"episode_number" is set but not "season_number" or "series_name"'
+    for media in _get_library_entries(plex_ssn, library_filter):
+        if media['type'] == 'movie' and not radarr_enabled:
+            continue
+        if media['type'] == 'episode' and not sonarr_enabled:
+            continue
 
-	args = {
-		'radarr_ssn': radarr_ssn,
-		'sonarr_ssn': sonarr_ssn
-	}
-	sections = plex_ssn.get(f'{plex_base_url}/library/sections').json()['MediaContainer'].get('Directory',[])
-	for lib in sections:
-		if not (lib['type'] in ('movie','show','artist') and (all == True \
-		or (library_name != None and lib['title'] == library_name) \
-		or (all_movie == True and lib['type'] == 'movie') \
-		or (all_show == True and lib['type'] == 'show'))):
-			#a specific library is targeted and this one is not it, so skip
-			continue
+        _process_media(radarr_ssn, sonarr_ssn, media)
 
-		#this library (or something in it) should be processed
-		print(lib['title'])
+        result_json.append(media['ratingKey'])
 
-		if lib['type'] == 'movie':
-			lib_output = plex_ssn.get(f'{plex_base_url}/library/sections/{lib["key"]}/all')
-			if lib_output.status_code != 200: continue
-			lib_output = lib_output.json()['MediaContainer'].get('Metadata',[])
-			for movie in lib_output:
-				if movie_name != None and movie['title'] != movie_name:
-					continue
+    return result_json
 
-				response = _process_media(type='movie', data=movie, **args)
-				if isinstance(response, str): return response
-				else: result_json.append(movie['ratingKey'])
-
-				if movie_name != None:
-					break
-			else:
-				if movie_name != None:
-					return 'Movie not found'
-
-		elif lib['type'] == 'show':
-			lib_output = plex_ssn.get(f'{plex_base_url}/library/sections/{lib["key"]}/all', params={'type': '4'})
-			if lib_output.status_code != 200: continue
-			lib_output = lib_output.json()['MediaContainer'].get('Metadata',[])
-			series_found, season_found = False, False
-			for episode in lib_output:
-				if series_name != None and episode['grandparentTitle'] != series_name:
-					continue
-				else:
-					series_found = True
-				if season_number != None and episode['parentIndex'] != season_number:
-					continue
-				else:
-					series_found = True
-				if episode_number != None and episode['index'] != episode_number:
-					continue
-				if series_name == None:
-					series_found = True
-				if season_number == None:
-					season_found = True
-
-				#process episode
-				response = _process_media(type='episode', data=episode, **args)
-				if isinstance(response, str): return response
-				else: result_json.append(episode['ratingKey'])
-
-				if episode_number != None:
-					break
-			else:
-				if episode_number != None:
-					return 'Episode not found'
-				if season_found == False:
-					return 'Season not found'
-				if series_found == False:
-					return 'Series not found'
-
-		else:
-			print('	Library not supported')
-
-		if library_name != None:
-			break
-	else:
-		if library_name != None:
-			return 'Library not found'
-
-	return result_json
 
 if __name__ == '__main__':
-	from requests import Session
-	from argparse import ArgumentParser
+    from argparse import ArgumentParser
 
-	#setup vars
-	plex_ssn = Session()
-	plex_ssn.headers.update({'Accept': 'application/json'})
-	plex_ssn.params.update({'X-Plex-Token': plex_api_token})
-	radarr_ssn = Session()
-	radarr_ssn.params.update({'apikey': radarr_api_token})
-	sonarr_ssn = Session()
-	sonarr_ssn.params.update({'apikey': sonarr_api_token})
+    from requests import Session
 
-	#setup arg parsing
-	parser = ArgumentParser(description='Up- or downgrade media if it falls under the defined rules')
+    # Setup vars
+    plex_ssn = Session()
+    plex_ssn.headers.update({'Accept': 'application/json'})
+    plex_ssn.params.update({'X-Plex-Token': plex_api_token}) # type: ignore
+    radarr_ssn = Session()
+    radarr_ssn.params.update({'apikey': radarr_api_token}) # type: ignore
+    sonarr_ssn = Session()
+    sonarr_ssn.params.update({'apikey': sonarr_api_token}) # type: ignore
 
-	#args regarding target selection
-	#general selectors
-	parser.add_argument('-a','--All', action='store_true', help='Target every media item in every library (use with care!)')
-	parser.add_argument('--AllMovie', action='store_true', help='Target all movie libraries')
-	parser.add_argument('--AllShow', action='store_true', help='Target all show libraries')
-	parser.add_argument('-l','--LibraryName', type=str, help='Target a specific library based on it\'s name (movie, show and music libraries supported)')
-	#movie selectors
-	parser.add_argument('-m','--MovieName', type=str, help='Target a specific movie inside a movie library based on it\'s name (only accepted when -l is a movie library)')
-	#show selectors
-	parser.add_argument('-s','--SeriesName', type=str, help='Target a specific series inside a show library based on it\'s name (only accepted when -l is a show library)')
-	parser.add_argument('-S','--SeasonNumber', type=int, help='Target a specific season inside the targeted series based on it\'s number (only accepted when -s is given) (specials is 0)')
-	parser.add_argument('-e','--EpisodeNumber', type=int, help='Target a specific episode inside the targeted season based on it\'s number (only accepted when -S is given)')
+    # Setup arg parsing
+    # autopep8: off
+    parser = ArgumentParser(description="Up- or downgrade media if it falls under the defined rules.")
 
-	args = parser.parse_args()
-	#call function and process result
-	response = auto_upgrade_media(
-		plex_ssn, radarr_ssn, sonarr_ssn,
-		all=args.All, all_movie=args.AllMovie, all_show=args.AllShow,
-		library_name=args.LibraryName,
-		movie_name=args.MovieName,
-		series_name=args.SeriesName, season_number=args.SeasonNumber, episode_number=args.EpisodeNumber,
-	)
-	if not isinstance(response, list):
-		if response == 'Both "all" and a target-specifier are set':
-			parser.error('Both -a/--All and a target-specifier are set')
-		elif response == '"all" is set to False but no target-specifier is given':
-			parser.error('-a/--All is not set but also no target-specifier is set')
-		elif response == '"season_number" is set but not "series_name"':
-			parser.error('-S/--SeasonNumber is set but not -s/--SeriesName')
-		elif response == '"episode_number" is set but not "season_number" or "series_name"':
-			parser.error('-e/--EpisodeNumber is set but not -S/--SeasonNumber or -s/--SeriesName')
-		else:
-			parser.error(response)
+    ts = parser.add_argument_group(title="Target Selectors")
+    ts.add_argument('-a','--All', action='store_true', help="Target every media item in every library (use with care!)")
+    ts.add_argument('--AllMovie', action='store_true', help="Target all movie libraries")
+    ts.add_argument('--AllShow', action='store_true', help="Target all show libraries")
+
+    ts.add_argument('-l', '--LibraryName', type=str, action='append', default=[], help="Name of target library; allowed to give argument multiple times")
+    ts.add_argument('-m', '--MovieName', type=str, action='append', default=[], help="Target a specific movie inside a movie library based on it's name; allowed to give argument multiple times")
+    ts.add_argument('-s', '--SeriesName', type=str, action='append', default=[], help="Target a specific series inside a show library based on it's name; allowed to give argument multiple times")
+    ts.add_argument('-S', '--SeasonNumber', type=int, action='append', default=[], help="Target a specific season inside the targeted series based on it's number (only accepted when -s is given exactly once) (specials is 0); allowed to give argument multiple times")
+    ts.add_argument('-e', '--EpisodeNumber', type=int, action='append', default=[], help="Target a specific episode inside the targeted season based on it's number (only accepted when -S is given exactly once); allowed to give argument multiple times")
+    # autopep8: on
+
+    args = parser.parse_args()
+
+    try:
+        lf = LibraryFilter(
+            all=args.All,
+            all_movie=args.AllMovie,
+            all_show=args.AllShow,
+            libraries=args.LibraryName,
+            movies=args.MovieName,
+            series=args.SeriesName,
+            season_numbers=args.SeasonNumber,
+            episode_numbers=args.EpisodeNumber
+        )
+
+        auto_upgrade_media(
+            plex_ssn, radarr_ssn, sonarr_ssn,
+            library_filter=lf
+        )
+
+    except ValueError as e:
+        parser.error(e.args[0])
