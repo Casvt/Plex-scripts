@@ -46,11 +46,7 @@ plex_base_url = getenv('plex_base_url', plex_base_url)
 plex_api_token = getenv('plex_api_token', plex_api_token)
 base_url = plex_base_url.rstrip('/')
 
-profile_to_id = {
-    'Mobile': 1,
-    'TV': 2,
-    'Original Quality': 3
-}
+profiles = ("mobile", "tv", "original")
 
 
 @dataclass
@@ -245,7 +241,7 @@ def auto_optimize(
     result_json = []
     counter = 0
 
-    if profile not in profile_to_id:
+    if profile not in profiles:
         raise ValueError("Invalid profile")
 
     for media in _get_library_entries(ssn, library_filter):
@@ -263,7 +259,7 @@ def auto_optimize(
 
         plex.fetchItem(int(media['ratingKey'])).optimize(
             locationID=-1,
-            targetTagID=profile_to_id[profile]
+            target=profile
         )
         result_json.append(media['ratingKey'])
         counter += 1
@@ -285,7 +281,7 @@ if __name__ == '__main__':
     # Setup arg parsing
     # autopep8: off
     parser = ArgumentParser(description="Optimize the targeted media if it isn't already.")
-    parser.add_argument('-P', '--Profile', type=str, choices=list(profile_to_id.keys()), required=True, help="The optimization profile")
+    parser.add_argument('-P', '--Profile', type=str, choices=profiles, required=True, help="The optimization profile")
     parser.add_argument('-L', '--Limit', type=int, default=-1, help="Maximum amount of media that the script is allowed to send to the queue")
 
     ts = parser.add_argument_group(title="Target Selectors")
