@@ -244,7 +244,7 @@ def hdr_to_sdr_optimizer(
 
         print(f'        Creating SDR version')
 
-        plex.fetchItem(int(media['ratingKey'])).optimize(
+        plex.fetchItem(int(media['ratingKey'])).optimize( # type: ignore
             locationID=-1,
             target="tv"
         )

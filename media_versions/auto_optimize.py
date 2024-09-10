@@ -257,7 +257,7 @@ def auto_optimize(
         else:
             print(f'            Not optimized for {profile}; optimizing')
 
-        plex.fetchItem(int(media['ratingKey'])).optimize(
+        plex.fetchItem(int(media['ratingKey'])).optimize( # type: ignore
             locationID=-1,
             target=profile
         )
