@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, List, Tuple, Union
 if TYPE_CHECKING:
     from requests import Session
 
-# ===== FILL THESE VARIABLES TO USE PELX =======
+# ===== FILL THESE VARIABLES TO USE PLEX =======
 plex_base_url = ''
 plex_api_token = ''
 # ===== FILL THESE VARIABLES TO USE SONARR =====
