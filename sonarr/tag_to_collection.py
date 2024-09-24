@@ -1,167 +1,298 @@
-#!/usr/bin/python3
-#-*- coding: utf-8 -*-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 """
 The use case of this script is the following:
-	Put all movies (radarr) or series (sonarr) with a certain tag in a collection in plex
+    Put all movies (Radarr) or series (Sonarr) with a certain tag
+    in a collection in Plex.
+
 Requirements (python3 -m pip install [requirement]):
-	requests
+    requests
+
 Setup:
-	Fill the variables below firstly, then run the script with -h to see the arguments that you need to give.
+    1. Fill the variables below.
+    2. Run the script in a terminal/shell with the "-h" flag to learn more about the parameters.
+        python3 tag_to_collection.py -h
+        or
+        python tag_to_collection.py -h
+
+Examples:
+    --Source "radarr" --TagName "serious" --LibraryName "Films" --CollectionName "Serious Movies"
+
+        In Radarr, grab all movies tagged with the tag "serious" and put them
+        in a collection called "Serious Movies" in the "Films" library.
+
+    -s "sonarr" -t "short" -l "Tv-series" --CollectionName "Short Series"
+
+        In Sonarr, grab all shows tagged with the tag "short" and put them
+        in a collection called "Short Series" in the "Tv-series" library.
 """
 
-plex_ip = ''
-plex_port = ''
-plex_api_token = ''
-
-#These need to be filled when you want to use the script with sonarr
-sonarr_ip = ''
-sonarr_port = ''
-sonarr_api_token = ''
-
-#These need to be filled when you want to use the script with radarr
-radarr_ip = ''
-radarr_port = ''
-radarr_api_token = ''
-
+from enum import Enum
 from os import getenv
-import requests
+from typing import TYPE_CHECKING, Dict, List, Union
+
+if TYPE_CHECKING:
+    from requests import Session
+
+# ===== FILL THESE VARIABLES ===================
+plex_base_url = ''
+plex_api_token = ''
+# ===== FILL THESE VARIABLES TO USE SONARR =====
+sonarr_base_url = ''
+sonarr_api_token = ''
+# ===== FILL THESE VARIABLES TO USE RADARR =====
+radarr_base_url = ''
+radarr_api_token = ''
+# ==============================================
 
 # Environmental Variables
-plex_ip = getenv('plex_ip', plex_ip)
-plex_port = getenv('plex_port', plex_port)
+plex_base_url = getenv('plex_base_url', plex_base_url)
 plex_api_token = getenv('plex_api_token', plex_api_token)
-base_url = f'http://{plex_ip}:{plex_port}'
-sonarr_ip = getenv('sonarr_ip', sonarr_ip)
-sonarr_port = getenv('sonarr_port', sonarr_port)
+sonarr_base_url = getenv('sonarr_base_url', sonarr_base_url)
 sonarr_api_token = getenv('sonarr_api_token', sonarr_api_token)
-radarr_ip = getenv('radarr_ip', radarr_ip)
-radarr_port = getenv('radarr_port', radarr_port)
+radarr_base_url = getenv('radarr_base_url', radarr_base_url)
 radarr_api_token = getenv('radarr_api_token', radarr_api_token)
+p_base_url = plex_base_url.rstrip('/')
+s_base_url = sonarr_base_url.rstrip('/') + '/api/v3'
+r_base_url = radarr_base_url.rstrip('/') + '/api/v3'
 
-def _find_in_plex(plex_ssn, path: str, sections: list):
-	#find library that file is in
-	for lib in sections:
-		for loc in lib['Location']:
-			if loc['path'] in path:
-				lib_id = lib['key']
-				content_type = '1' if lib['type'] == 'movie' else '4'
-				break
-		else:
-			continue
-		break
-	else:
-		return ''
 
-	#find file in library
-	lib_output = plex_ssn.get(f'{base_url}/library/sections/{lib_id}/all', params={'type': content_type}).json()['MediaContainer']['Metadata']
-	for entry in lib_output:
-		for media in entry['Media']:
-			for part in media['Part']:
-				if path in part['file']:
-					return entry['grandparentRatingKey']
-	return ''
+class SoftwareType(Enum):
+    radarr = 1
+    sonarr = 2
 
-def tag_to_collection(plex_ssn, source: str, tag_name: str, library_name: str, collection_name: str):
-	result_json = []
 
-	sections = plex_ssn.get(f'{base_url}/library/sections').json()['MediaContainer']['Directory']
-	for lib in sections:
-		if lib['title'] == library_name:
-			lib_id = lib['key']
-			break
-	else:
-		return 'Library not found'
+def _sonarr(
+    sonarr_ssn: 'Session',
+    tag_name: str
+) -> List[str]:
 
-	if source == 'sonarr':
-		if sonarr_ip and sonarr_port and sonarr_api_token:
-			#apply script to sonarr
-			sonarr_base_url = f'http://{sonarr_ip}:{sonarr_port}/api/v3'
-			sonarr_ssn = requests.Session()
-			sonarr_ssn.params.update({'apikey': sonarr_api_token})
-			try:
-				series_list = sonarr_ssn.get(f'{sonarr_base_url}/series').json()
-			except requests.exceptions.ConnectionError:
-				return 'Can\'t connect to Sonarr'
+    series_list: List[dict] = sonarr_ssn.get(
+        f'{s_base_url}/series'
+    ).json()
 
-			#find id of tag
-			tags = sonarr_ssn.get(f'{sonarr_base_url}/tag').json()
-			for tag in tags:
-				if tag['label'] == tag_name:
-					tag_id = tag['id']
-					break
-			else:
-				return 'Tag not found'
+    # Find id of tag
+    tags = sonarr_ssn.get(
+        f'{s_base_url}/tag'
+    ).json()
+    print(tags)
+    for tag in tags:
+        if tag['label'] == tag_name:
+            break
+    else:
+        raise ValueError("Tag not found")
 
-			#loop through all series in sonarr
-			for series in series_list:
-				if tag_id in series['tags']:
-					#series found with tag applied
-					result_json.append(_find_in_plex(plex_ssn=plex_ssn, path=series['path'], sections=sections))
-#delete prev collection with name
-#create collection
-#add ratingkeys to result_json
-		else:
-			return 'Sonarr set as source but variables not set'
+    # Add series of tag to result
+    result_json: List[str] = [
+        s['path']
+        for s in series_list
+        if tag['id'] in s['tags']
+    ]
+    return result_json
 
-	elif source == 'radarr':
-		if radarr_ip and radarr_port and radarr_api_token:
-			#apply script to sonarr
-			radarr_base_url = f'http://{radarr_ip}:{radarr_port}/api/v3'
-			radarr_ssn = requests.Session()
-			radarr_ssn.params.update({'apikey': radarr_api_token})
-			try:
-				movie_list = radarr_ssn.get(f'{radarr_base_url}/movie').json()
-			except requests.exceptions.ConnectionError:
-				return 'Can\'t connect to Radarr'
 
-			#find id of tag
-			tags = radarr_ssn.get(f'{radarr_base_url}/tag')
-			for tag in tags:
-				if tag['label'] == tag_name:
-					tag_id = tag['id']
-					break
-			else:
-				return 'Tag not found'
+def _radarr(
+    radarr_ssn: 'Session',
+    tag_name: str
+) -> List[str]:
 
-			#loop through all movies in radarr
-			for movie in movie_list:
-				if tag_id in movie['tags']:
-					#series found with tag applied
-					result_json.append(_find_in_plex(plex_ssn=plex_ssn, path=movie.get('movieFile','').get('path',''), sections=sections))
-		else:
-			return 'Radarr set as source but variables not set'
+    movie_list = radarr_ssn.get(
+        f'{r_base_url}/movie'
+    ).json()
 
-	#delete collection if it already exists
-	collections = plex_ssn.get(f'{base_url}/library/sections/{lib_id}/collections').json()['MediaContainer'].get('Metadata',[])
-	for collection in collections:
-		if collection['title'] == collection_name:
-			plex_ssn.delete(f'{base_url}/library/collections/{collection["ratingKey"]}')
+    # Find id of tag
+    tags = radarr_ssn.get(
+        f'{r_base_url}/tag'
+    ).json()
+    for tag in tags:
+        if tag['label'] == tag_name:
+            break
+    else:
+        raise ValueError("Tag not found")
 
-	#create collection
-	machine_id = plex_ssn.get(f'{base_url}/').json()['MediaContainer']['machineIdentifier']
-	plex_ssn.post(f'{base_url}/library/collections', params={'type': '1' if source == 'radarr' else '2', 'title': collection_name, 'smart': '0', 'sectionId': lib_id, 'uri': f'server://{machine_id}/com.plexapp.plugins.library/library/metadata/{",".join(result_json)}'})
+    # Add movies of tag to result
+    result_json: List[str] = [
+        m['movieFile']['path']
+        for m in movie_list
+        if 'movieFile' in m
+        and tag['id'] in m['tags']
+    ]
+    return result_json
 
-	return result_json
+
+def tag_to_collection(
+    plex_ssn: 'Session',
+    radarr_ssn: Union['Session', None],
+    sonarr_ssn: Union['Session', None],
+    source: SoftwareType,
+    tag_name: str,
+    library_name: str,
+    collection_name: str
+) -> List[int]:
+    """Put all movies (Radarr) or series (Sonarr) with a certain tag
+    in a collection in Plex.
+
+    Args:
+        plex_ssn (Session): The plex requests session to fetch with.
+
+        radarr_ssn (Union[Session, None]): The radarr requests
+        session to fetch with, if radarr is the source to work on.
+
+        sonarr_ssn (Union[Session, None]): The sonarr requests
+        session to fetch with, if sonarr is the source to work on.
+
+        source (SoftwareType): The type to work on.
+
+        tag_name (str): The name of the tag to make the collection out of.
+
+        library_name (str): The name of the library to put the collection in.
+
+        collection_name (str): The name of the collection.
+
+    Raises:
+        ValueError: Library not found.
+        ValueError: Service requested that is not set up.
+        ValueError: Tag not found.
+
+    Returns:
+        List[int]: List of plex rating keys that were put in the collection.
+    """
+    # Find plex library
+    sections = plex_ssn.get(
+        f'{p_base_url}/library/sections'
+    ).json()['MediaContainer'].get('Directory', [])
+
+    for lib in sections:
+        if lib['title'] == library_name:
+            break
+    else:
+        raise ValueError("Library not found")
+
+    lib_content: List[dict] = plex_ssn.get(
+        f'{p_base_url}/library/sections/{lib["key"]}/all',
+        params={"type": "1" if lib["type"] == "movie" else "4"}
+    ).json()['MediaContainer'].get('Metadata', [])
+
+    if lib["type"] == "movie":
+        key_type = "ratingKey"
+    else:
+        key_type = "grandparentRatingKey"
+
+    file_to_key: Dict[str, str] = {
+        part['file']: c[key_type]
+        for c in lib_content
+        for media in c.get('Media', [])
+        for part in media.get('Part', [])
+    }
+
+    # Get plex rating keys of collection entries
+    if (
+        source == SoftwareType.sonarr
+        and sonarr_ssn is not None
+    ):
+        files = _sonarr(sonarr_ssn, tag_name)
+
+    elif (
+        source == SoftwareType.radarr
+        and radarr_ssn is not None
+    ):
+        files = _radarr(radarr_ssn, tag_name)
+
+    else:
+        raise ValueError("Service requested that is not set up")
+
+    if source == SoftwareType.radarr:
+        result_json = [
+            file_to_key[f]
+            for f in files
+        ]
+
+    else: # sonarr
+        result_json: List[str] = []
+        for f in files:
+            for key, value in file_to_key.items():
+                if key.startswith(f):
+                    result_json.append(value)
+                    break
+
+    # If collection with this name already exists, remove it first
+    collections = plex_ssn.get(
+        f'{p_base_url}/library/sections/{lib["key"]}/collections'
+    ).json()['MediaContainer'].get('Metadata', [])
+    for collection in collections:
+        if collection['title'] == collection_name:
+            plex_ssn.delete(
+                f'{p_base_url}/library/collections/{collection["ratingKey"]}'
+            )
+
+    # Create collection
+    machine_id = plex_ssn.get(
+        f'{p_base_url}/'
+    ).json()['MediaContainer']['machineIdentifier']
+
+    plex_ssn.post(
+        f'{p_base_url}/library/collections',
+        params={
+            'type': "1" if lib["type"] == "movie" else "2",
+            'title': collection_name,
+            'smart': '0',
+            'sectionId': lib["key"],
+            'uri': f'server://{machine_id}/com.plexapp.library/library/metadata/{",".join(result_json)}'
+        }
+    )
+    return [int(rk) for rk in result_json]
+
 
 if __name__ == '__main__':
-	from requests import Session
-	from argparse import ArgumentParser
+    from argparse import ArgumentParser
 
-	#setup vars
-	ssn = Session()
-	ssn.headers.update({'Accept': 'application/json'})
-	ssn.params.update({'X-Plex-Token': plex_api_token})
+    from requests import Session
 
-	#setup arg parsing
-	parser = ArgumentParser(description="Put all movies (radarr) or series (sonarr) with a certain tag in a collection in plex")
-	parser.add_argument('-s', '--Source', type=str, choices=['sonarr','radarr'], help="Select the source which media files should be checked", required=True)
-	parser.add_argument('-t', '--TagName', type=str, help="Name of tag to search for", required=True)
-	parser.add_argument('-l', '--LibraryName', type=str, help="Name of the target library to put the collection in", required=True)
-	parser.add_argument('-c', '--CollectionName', type=str, help="Name of the collection", required=True)
+    # Setup vars
+    plex_ssn = Session()
+    plex_ssn.headers.update({'Accept': 'application/json'})
+    plex_ssn.params.update({'X-Plex-Token': plex_api_token}) # type: ignore
 
-	args = parser.parse_args()
-	#call function and process result
-	response = tag_to_collection(plex_ssn=ssn, source=args.Source, tag_name=args.TagName, library_name=args.LibraryName, collection_name=args.CollectionName)
-	if not isinstance(response, list):
-		parser.error(response)
+    # Setup arg parsing
+    # autopep8: off
+    parser = ArgumentParser(description="Put all movies (Radarr) or series (Sonarr) with a certain tag in a collection in Plex.")
+    parser.add_argument('-s', '--Source', type=str, choices=SoftwareType._member_names_, required=True, help="Select the source which entries should be processed")
+    parser.add_argument('-t', '--TagName', type=str, required=True, help="Name of tag to search create the collection for")
+    parser.add_argument('-l', '--LibraryName', type=str, required=True, help="Name of the target library to put the collection in")
+    parser.add_argument('-c', '--CollectionName', type=str, required=True, help="Name of the collection")
+    # autopep8: on
+
+    args = parser.parse_args()
+
+    try:
+        source = SoftwareType[args.Source]
+        radarr_ssn, sonarr_ssn = None, None
+
+        if source == SoftwareType.radarr:
+            if not (radarr_base_url and radarr_api_token):
+                raise ValueError("Radarr not set up")
+
+            radarr_ssn = Session()
+            radarr_ssn.params.update( # type: ignore
+                {'apikey': radarr_api_token}
+            )
+
+        elif source == SoftwareType.sonarr:
+            if not (sonarr_base_url and sonarr_api_token):
+                raise ValueError("Sonarr not set up")
+
+            sonarr_ssn = Session()
+            sonarr_ssn.params.update( # type: ignore
+                {'apikey': sonarr_api_token}
+            )
+
+        tag_to_collection(
+            plex_ssn, radarr_ssn, sonarr_ssn,
+            source,
+            args.TagName,
+            args.LibraryName, args.CollectionName
+        )
+
+    except ValueError as e:
+        parser.error(e.args[0])
