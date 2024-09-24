@@ -202,7 +202,7 @@ if __name__ == '__main__':
 
             sonarr_ssn = Session()
             sonarr_ssn.params.update( # type: ignore
-                {'apikey': radarr_api_token}
+                {'apikey': sonarr_api_token}
             )
 
         remove_codec(
