@@ -141,4 +141,6 @@ pyproject.toml
 
 # project related
 *_DEBUG*
+*_NEW*
+*_MODERN*
 tests/
