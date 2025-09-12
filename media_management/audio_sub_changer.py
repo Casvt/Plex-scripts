@@ -341,7 +341,7 @@ def _set_track(
                 streams.append({
                     'language': stream.get('languageTag', 'und'),
                     'id': stream['id'],
-                    'forced': 'forced' in stream,
+                    'forced': ('forced' in stream) or ('forced' in stream.get('title', '').lower()),
                     'codec': stream.get('codec'),
                     'channels': stream.get('channels', -1),
                     'title': stream.get('title', ''),
